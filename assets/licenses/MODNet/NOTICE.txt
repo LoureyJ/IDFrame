@@ -1,0 +1,9 @@
+Portrait Studio uses a locally adapted MODNet model.
+Upstream: https://github.com/ZHKKKe/MODNet
+Commit: 28165a451e4610c9d77cfdf925a94610bb2810fb
+Original model copyright belongs to the MODNet authors.
+The model and architecture are licensed under Apache-2.0; see LICENSE.txt.
+Local adaptation: 10 epochs / 70 SOC steps on seven unlabelled portrait images.
+Second round: 10 epochs / 190 weakly supervised steps on 12 camo/low-quality
+photos with seven curl examples for teacher replay. Selected epoch 6 / 114 steps.
+Coarse interior scribbles are assistant-created weak labels, not precise alpha mattes.

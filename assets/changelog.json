@@ -1,0 +1,111 @@
+[
+  {
+    "version": "1.1.12",
+    "changes": [
+      "Renamed Portrait Studio to IDFrame in the application, changelog, and update messages.",
+      "Existing installed shortcuts are renamed to IDFrame when the destination name is unused, retaining the camera icon and compatible update paths.",
+      "Project source is now maintained on GitHub. LAN OTA publication remains controlled by the host."
+    ]
+  },
+  {
+    "version": "1.1.11",
+    "changes": [
+      "Saving now asks for the person's name and generates PersonName_2x2.png, using underscores for spaces.",
+      "Duplicate filenames receive numbered suffixes such as _002 and _003. Existing photos are preserved, including when another save creates the same filename at the same time.",
+      "The name prompt shows the generated filename, validates Windows filename characters, and clears the person's name when a new photo is opened or pasted."
+    ]
+  },
+  {
+    "version": "1.1.10",
+    "changes": [
+      "The host can follow its active LAN IPv4 address automatically when starting the server or preparing a release, and checks for changes every three seconds while the server runs.",
+      "The host's own registered application follows that same LAN IP instead of localhost. Remote client addresses are not rewritten.",
+      "Updated the host firewall setup script to retain local-subnet access when the host IP changes."
+    ]
+  },
+  {
+    "version": "1.1.9",
+    "changes": [
+      "Added Auto as the default removal mode. It compares both local model results for missing person interiors and background spill, then selects one complete result.",
+      "Shows whether Auto selected Protect person or Fine hair. Both manual modes remain available if you prefer the other result.",
+      "Auto can take longer because it evaluates both models. Selection is a heuristic and can still make mistakes; an available result is retained if one model cannot detect a person."
+    ]
+  },
+  {
+    "version": "1.1.8",
+    "changes": [
+      "Added Protect person as the default removal mode after testing the original client portraits with missing hair and scalp areas.",
+      "Kept Fine hair as a selectable mode for detailed curls. Switching modes after processing recomputes the result and resets its crop.",
+      "Replaced the experimental two-model blend with separate modes to avoid adding patches or damaging the head outline. Both modes remain offline."
+    ]
+  },
+  {
+    "version": "1.1.7",
+    "changes": [
+      "Prepared an experimental two-model protection pass against the client screen-photo examples.",
+      "Testing the original portraits exposed artifacts; this approach was replaced by the selectable modes in v1.1.8."
+    ]
+  },
+  {
+    "version": "1.1.6",
+    "changes": [
+      "Added an interactive 2 × 2 crop preview with a zoom slider, mouse-wheel zoom, and drag-to-position controls.",
+      "Reset restores the full photo framing. Opening or pasting a new photo clears the previous crop.",
+      "Saved photos use the selected framing, rendered from the full-resolution cutout, with a white background at 1200 × 1200 pixels and 600 DPI."
+    ]
+  },
+  {
+    "version": "1.1.5",
+    "changes": [
+      "Added a Changelog button beside the application heading.",
+      "Browse release notes by version, with your installed version selected automatically. Notes are available offline."
+    ]
+  },
+  {
+    "version": "1.1.4",
+    "changes": [
+      "Added a centered Checking Updates dialog with the camera logo and download progress, without a console window.",
+      "Existing clients can receive launcher improvements through OTA. The refreshed launcher takes effect after closing and reopening the updated app.",
+      "Adapted the portrait model using the camo and low-quality photo folders, retaining earlier curl examples. Some missing faces and clothing are better preserved; severe camouflage and blurry boundaries remain imperfect."
+    ]
+  },
+  {
+    "version": "1.1.3",
+    "changes": [
+      "Added a locally adapted MODNet portrait matting model for finer hair and curls.",
+      "Preserved continuous hair opacity and used higher-resolution, proportionally resized model inputs.",
+      "Kept the original U2Net model as a fallback when the matting model is absent."
+    ]
+  },
+  {
+    "version": "1.1.2",
+    "changes": [
+      "Changed exports to 2 × 2 inches: 1200 × 1200 pixels at 600 DPI, with a solid white background.",
+      "Fit portraits proportionally into the square while preserving original files."
+    ]
+  },
+  {
+    "version": "1.1.1",
+    "changes": [
+      "Prepared Philippine passport photo dimensions of 35 × 45 mm at 600 DPI; later replaced by the 2 × 2 inch format in v1.1.2.",
+      "Displayed the client version in the application title and heading, with automatic version increments for changed releases.",
+      "Included camera-logo branding and refresh support for desktop, Start menu, and existing taskbar shortcuts."
+    ]
+  },
+  {
+    "version": "1.1.0",
+    "changes": [
+      "Included clipboard photo pasting with Ctrl+V alongside Open photo.",
+      "Included 600 DPI export with the earlier 208 × 208 pixel dimensions.",
+      "Updated the default LAN update port to 8766 and provided an installer upgrade for version 1 clients."
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "changes": [
+      "Initial offline Python portrait background remover with white-background PNG exports.",
+      "Added a Windows installer, desktop shortcut, and startup checks for LAN updates.",
+      "Downloaded only changed application files while retaining unchanged files."
+    ]
+  }
+]

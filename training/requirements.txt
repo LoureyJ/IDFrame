@@ -1,0 +1,5 @@
+# Host training environment only; do not add these to the client requirements.
+torch>=2.6,<3
+onnx>=1.17,<2
+numpy>=2.2,<3
+Pillow>=11,<13
