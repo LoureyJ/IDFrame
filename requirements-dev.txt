@@ -1,0 +1,3 @@
+-r requirements-build.txt
+black==26.1.0
+ruff==0.14.10

@@ -1,4 +1,5 @@
 """Stable desktop entry point: check host, then start the installed application."""
+
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -18,19 +19,28 @@ from launcher_refresh import refresh_launcher
 
 
 def set_window_icon(window, root_path):
+    """Apply the installed camera icon to an updater or message window on Windows."""
     icon = root_path / "payload" / "assets" / "portrait-studio.ico"
     if os.name == "nt" and icon.is_file():
         window.iconbitmap(default=str(icon))
         window.iconbitmap(str(icon))
 
 
-def check_updates(root_path, logger, progress=lambda text: None, transfer_progress=None):
+def check_updates(
+    root_path, logger, progress=lambda text: None, transfer_progress=None
+):
     # Recovery failures propagate; never run a partially installed release.
+    """Recover interrupted updates, then check the host with an offline fallback."""
     recover(root_path)
     try:
         config = json.loads((root_path / "client.json").read_text(encoding="utf-8-sig"))
-        status = apply_update(root_path, config["host_url"], PUBLIC_KEY, progress=progress,
-                              transfer_progress=transfer_progress)
+        status = apply_update(
+            root_path,
+            config["host_url"],
+            PUBLIC_KEY,
+            progress=progress,
+            transfer_progress=transfer_progress,
+        )
         logger.info(status)
         return status
     except Exception:
@@ -40,7 +50,9 @@ def check_updates(root_path, logger, progress=lambda text: None, transfer_progre
 
 
 def acquire_lock(root):
+    """Acquire the client session lock or return None when another copy holds it."""
     import msvcrt
+
     handle = (root / ".client.lock").open("a+b")
     handle.seek(0)
     if not handle.read(1):
@@ -56,6 +68,7 @@ def acquire_lock(root):
 
 
 def create_update_dialog(root_path):
+    """Build and center the update window with its logo, status, and progress bar."""
     window = tk.Tk()
     window.withdraw()
     set_window_icon(window, root_path)
@@ -67,12 +80,17 @@ def create_update_dialog(root_path):
     logo = root_path / "payload" / "assets" / "portrait-studio.png"
     if logo.is_file():
         from PIL import Image, ImageOps, ImageTk
+
         with Image.open(logo) as source:
-            window.logo = ImageTk.PhotoImage(ImageOps.contain(source.convert("RGBA"), (96, 96)))
+            window.logo = ImageTk.PhotoImage(
+                ImageOps.contain(source.convert("RGBA"), (96, 96))
+            )
         ttk.Label(frame, image=window.logo).pack(pady=(0, 12))
     ttk.Label(frame, text="Checking Updates", font=("Segoe UI", 15, "bold")).pack()
     text = tk.StringVar(value="Connecting to your update host…")
-    ttk.Label(frame, textvariable=text, anchor="center", wraplength=392).pack(fill="x", pady=(10, 16))
+    ttk.Label(frame, textvariable=text, anchor="center", wraplength=392).pack(
+        fill="x", pady=(10, 16)
+    )
     progress = ttk.Progressbar(frame, mode="indeterminate", maximum=100)
     progress.pack(fill="x")
     progress.start(12)
@@ -86,13 +104,25 @@ def create_update_dialog(root_path):
 
 
 def main():
+    """Handle launcher refresh, smoke tests, or the normal locked update-and-launch session."""
     set_taskbar_identity()
-    root_path = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1] / "dist" / "client"
+    root_path = (
+        Path(sys.executable).resolve().parent
+        if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parents[1] / "dist" / "client"
+    )
     if sys.argv[1:] == ["--refresh-launcher"]:
         root_path = Path(sys.executable).resolve().parent.parent
     logger = logging.getLogger("updates")
     logger.setLevel(logging.INFO)
-    logger.addHandler(RotatingFileHandler(root_path / "update.log", maxBytes=1024 * 1024, backupCount=2, encoding="utf-8"))
+    logger.addHandler(
+        RotatingFileHandler(
+            root_path / "update.log",
+            maxBytes=1024 * 1024,
+            backupCount=2,
+            encoding="utf-8",
+        )
+    )
     if sys.argv[1:] == ["--refresh-launcher"]:
         try:
             refresh_launcher(root_path, PUBLIC_KEY, acquire_lock)
@@ -106,7 +136,10 @@ def main():
         window = tk.Tk()
         set_window_icon(window, root_path)
         window.withdraw()
-        messagebox.showinfo("IDFrame", "IDFrame is already running. Close it before opening another copy.")
+        messagebox.showinfo(
+            "IDFrame",
+            "IDFrame is already running. Close it before opening another copy.",
+        )
         window.destroy()
         return
     if len(sys.argv) == 3 and sys.argv[1] == "--smoke-test":
@@ -115,9 +148,16 @@ def main():
             environment = os.environ.copy()
             environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
             executable = root_path / "payload" / "PortraitRuntime.exe"
-            subprocess.run([str(executable), "--smoke-test", sys.argv[2]], cwd=executable.parent,
-                           env=environment, check=True, timeout=60)
-            Path(sys.argv[2]).with_suffix(".update.json").write_text(json.dumps({"status": status}))
+            subprocess.run(
+                [str(executable), "--smoke-test", sys.argv[2]],
+                cwd=executable.parent,
+                env=environment,
+                check=True,
+                timeout=60,
+            )
+            Path(sys.argv[2]).with_suffix(".update.json").write_text(
+                json.dumps({"status": status})
+            )
         finally:
             lock.close()
         return
@@ -125,18 +165,31 @@ def main():
     events = queue.Queue()
 
     def worker():
+        """Run update I/O off the UI thread and enqueue progress or completion events."""
         try:
-            status = check_updates(root_path, logger, progress=lambda value: events.put(("progress", value)),
-                                   transfer_progress=lambda completed, total: events.put(("bytes", (completed, total))))
+            status = check_updates(
+                root_path,
+                logger,
+                progress=lambda value: events.put(("progress", value)),
+                transfer_progress=lambda completed, total: events.put(
+                    ("bytes", (completed, total))
+                ),
+            )
         except Exception:
             logger.exception("Could not recover interrupted installation")
-            events.put(("fatal", "An interrupted update could not be restored. Reinstall IDFrame or contact your host administrator."))
+            events.put(
+                (
+                    "fatal",
+                    "An interrupted update could not be restored. Reinstall IDFrame or contact your host administrator.",
+                )
+            )
             return
         events.put(("done", status))
 
     child = []
 
     def poll():
+        """Apply queued status changes on the UI thread and start the runtime after updates finish."""
         while not events.empty():
             kind, value = events.get_nowait()
             if kind == "progress":
@@ -144,7 +197,9 @@ def main():
             elif kind == "bytes":
                 completed, total = value
                 progress.stop()
-                progress.configure(mode="determinate", value=95 * completed / max(total, 1))
+                progress.configure(
+                    mode="determinate", value=95 * completed / max(total, 1)
+                )
             elif kind == "fatal":
                 messagebox.showerror("IDFrame", value)
                 window.destroy()
@@ -154,7 +209,10 @@ def main():
                 progress.configure(mode="determinate", value=100)
                 executable = root_path / "payload" / "PortraitRuntime.exe"
                 if not executable.is_file():
-                    messagebox.showerror("IDFrame", "Application files are missing. Reinstall the program.")
+                    messagebox.showerror(
+                        "IDFrame",
+                        "Application files are missing. Reinstall the program.",
+                    )
                     window.destroy()
                     return
                 environment = os.environ.copy()
@@ -162,11 +220,22 @@ def main():
                 environment["PORTRAIT_STUDIO_LAUNCHER"] = "1"
                 environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
                 try:
-                    child.append(subprocess.Popen([str(executable)], cwd=executable.parent, env=environment,
-                                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0))
+                    child.append(
+                        subprocess.Popen(
+                            [str(executable)],
+                            cwd=executable.parent,
+                            env=environment,
+                            creationflags=(
+                                subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                            ),
+                        )
+                    )
                 except OSError:
                     logger.exception("Could not start application")
-                    messagebox.showerror("IDFrame", "Could not start the installed application. See update.log or reinstall.")
+                    messagebox.showerror(
+                        "IDFrame",
+                        "Could not start the installed application. See update.log or reinstall.",
+                    )
                 window.destroy()
                 return
         window.after(75, poll)

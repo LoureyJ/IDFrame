@@ -56,6 +56,7 @@ var
   HostPage: TInputQueryWizardPage;
 
 procedure InitializeWizard;
+// Ask for the LAN host address before installing this client.
 begin
   HostPage := CreateInputQueryPage(wpSelectDir, 'LAN update host',
     'Where should this client check for updates?',
@@ -65,6 +66,7 @@ begin
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
+// Validate the entered host URL before advancing the installer.
 var
   URL: String;
 begin
@@ -83,6 +85,7 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+// Persist the chosen host URL after installation finishes.
 var
   URL: String;
 begin

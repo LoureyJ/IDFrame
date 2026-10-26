@@ -1,4 +1,5 @@
 """Integration smoke test using the installed model with network access blocked."""
+
 import socket
 import unittest
 from unittest.mock import patch
@@ -11,12 +12,15 @@ from portrait import MODEL_PATH, PortraitRemover, format_portrait
 class OfflineInferenceTests(unittest.TestCase):
     def test_local_model_produces_white_2x2_photo_without_network(self):
         # Synthetic input checks the real ONNX pipeline, not portrait accuracy.
+        """Verify that local model produces white 2x2 photo without network."""
         image = Image.new("RGB", (240, 320), "#6484a8")
         drawing = ImageDraw.Draw(image)
         drawing.ellipse((75, 25, 165, 145), fill="#dda888")
         drawing.rectangle((95, 125, 145, 175), fill="#dda888")
         drawing.ellipse((35, 155, 205, 410), fill="#27313e")
-        with patch.object(socket, "socket", side_effect=AssertionError("Network access attempted")):
+        with patch.object(
+            socket, "socket", side_effect=AssertionError("Network access attempted")
+        ):
             cutout = PortraitRemover().remove(image)
         self.assertEqual(cutout.size, image.size)
         self.assertEqual(cutout.mode, "RGBA")

@@ -17,6 +17,7 @@ from deployment.updater import apply_update, recover, validate_url
 
 class UpdateTests(unittest.TestCase):
     def setUp(self):
+        """Create isolated fixtures and resources needed by each test."""
         self.temp = tempfile.TemporaryDirectory()
         self.base = Path(self.temp.name)
         self.source = self.base / "source"
@@ -31,10 +32,12 @@ class UpdateTests(unittest.TestCase):
 
         class Handler(parent):
             def do_GET(self):
+                """Record a test HTTP request before delegating to the real update handler."""
                 requests.append(self.path)
                 super().do_GET()
 
             def log_message(self, *args):
+                """Suppress HTTP request logging so test output shows only test results."""
                 pass
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -43,19 +46,23 @@ class UpdateTests(unittest.TestCase):
         self.url = f"http://127.0.0.1:{self.server.server_port}"
 
     def tearDown(self):
+        """Close test resources and remove temporary fixtures after each test."""
         self.server.shutdown()
         self.server.server_close()
         self.thread.join()
         self.temp.cleanup()
 
     def publish(self, version="1.0.0"):
+        """Publish the isolated fixture files and retain their verification public key."""
         raw, self.public, _ = publish(self.source, self.repo, self.key, version)
         return raw
 
     def update(self):
+        """Apply the fixture server's signed update to the isolated test client."""
         return apply_update(self.client, self.url, self.public)
 
     def initial(self):
+        """Install a baseline fixture release and reset recorded download requests."""
         (self.source / "app.py").write_text("old code")
         (self.source / "model.onnx").write_bytes(b"unchanged model")
         raw = self.publish()
@@ -64,6 +71,7 @@ class UpdateTests(unittest.TestCase):
         return raw
 
     def test_only_changed_file_downloaded_unchanged_file_not_touched(self):
+        """Verify that only changed file downloaded unchanged file not touched."""
         self.initial()
         model = self.client / "payload" / "model.onnx"
         timestamp = model.stat().st_mtime_ns
@@ -72,20 +80,30 @@ class UpdateTests(unittest.TestCase):
         self.update()
         self.assertEqual((self.client / "payload" / "app.py").read_text(), "new code")
         self.assertEqual(model.stat().st_mtime_ns, timestamp)
-        self.assertEqual(self.requests, ["/manifest.json", "/blobs/" + digest(self.source / "app.py")])
+        self.assertEqual(
+            self.requests,
+            ["/manifest.json", "/blobs/" + digest(self.source / "app.py")],
+        )
 
     def test_no_changes_means_no_file_downloads(self):
+        """Verify that no changes means no file downloads."""
         self.initial()
         self.update()
         self.assertEqual(self.requests, ["/manifest.json"])
 
     def test_download_progress_counts_bytes_across_changed_files(self):
+        """Verify that download progress counts bytes across changed files."""
         self.initial()
         (self.source / "app.py").write_bytes(b"updated code")
         (self.source / "new.bin").write_bytes(b"x" * (1024 * 1024 + 12))
         self.publish("1.1.4")
         events = []
-        apply_update(self.client, self.url, self.public, transfer_progress=lambda done, total: events.append((done, total)))
+        apply_update(
+            self.client,
+            self.url,
+            self.public,
+            transfer_progress=lambda done, total: events.append((done, total)),
+        )
         total = len(b"updated code") + 1024 * 1024 + 12
         self.assertEqual(events[0], (0, total))
         self.assertEqual(events[-1], (total, total))
@@ -93,6 +111,7 @@ class UpdateTests(unittest.TestCase):
         self.assertGreater(len(events), 3)
 
     def test_corrupt_blob_leaves_installed_release_untouched(self):
+        """Verify that corrupt blob leaves installed release untouched."""
         previous = self.initial()
         (self.source / "app.py").write_text("new code")
         self.publish("1.0.1")
@@ -100,9 +119,12 @@ class UpdateTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.update()
         self.assertEqual((self.client / "payload" / "app.py").read_text(), "old code")
-        self.assertEqual((self.client / "installed-manifest.json").read_bytes(), previous)
+        self.assertEqual(
+            (self.client / "installed-manifest.json").read_bytes(), previous
+        )
 
     def test_unsigned_changes_rejected(self):
+        """Verify that unsigned changes rejected."""
         self.initial()
         path = self.repo / "manifest.json"
         data = json.loads(path.read_bytes())
@@ -112,6 +134,7 @@ class UpdateTests(unittest.TestCase):
             self.update()
 
     def test_rollback_on_install_failure(self):
+        """Verify that rollback on install failure."""
         previous = self.initial()
         (self.source / "app.py").write_text("new code")
         (self.source / "added.py").write_text("new module")
@@ -119,25 +142,35 @@ class UpdateTests(unittest.TestCase):
         original_replace = Path.replace
 
         def fail_one_replace(path, target):
+            """Inject one replacement failure to exercise transaction rollback."""
             if "files" in path.parts and path.name == "app.py":
                 raise PermissionError("simulated locked file")
             return original_replace(path, target)
 
-        with patch.object(Path, "replace", fail_one_replace), self.assertRaises(PermissionError):
+        with (
+            patch.object(Path, "replace", fail_one_replace),
+            self.assertRaises(PermissionError),
+        ):
             self.update()
         self.assertEqual((self.client / "payload" / "app.py").read_text(), "old code")
         self.assertFalse((self.client / "payload" / "added.py").exists())
-        self.assertEqual((self.client / "installed-manifest.json").read_bytes(), previous)
+        self.assertEqual(
+            (self.client / "installed-manifest.json").read_bytes(), previous
+        )
 
     def test_crash_recovery_restores_backup_and_manifest(self):
+        """Verify that crash recovery restores backup and manifest."""
         previous = self.initial()
         transaction = self.client / ".update-transaction"
         backup = transaction / "backup" / "app.py"
         backup.parent.mkdir(parents=True)
         (self.client / "payload" / "app.py").replace(backup)
         (self.client / "payload" / "app.py").write_text("partly installed")
-        journal = {"operations": [{"name": "app.py", "existed": True}],
-                   "previous": base64.b64encode(previous).decode(), "committed": False}
+        journal = {
+            "operations": [{"name": "app.py", "existed": True}],
+            "previous": base64.b64encode(previous).decode(),
+            "committed": False,
+        }
         atomic_write(transaction / "journal.json", canonical(journal))
         recover(self.client)
         recover(self.client)
@@ -145,6 +178,7 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(transaction.exists())
 
     def test_delete_managed_file_and_preserve_unmanaged_data(self):
+        """Verify that delete managed file and preserve unmanaged data."""
         self.initial()
         personal = self.client / "payload" / "personal.txt"
         personal.write_text("keep me")
@@ -155,6 +189,7 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(personal.read_text(), "keep me")
 
     def test_older_release_rejected(self):
+        """Verify that older release rejected."""
         old = self.initial()
         (self.source / "app.py").write_text("new code")
         self.publish("1.0.1")
@@ -164,33 +199,59 @@ class UpdateTests(unittest.TestCase):
             self.update()
 
     def test_path_traversal_and_windows_special_paths_rejected(self):
-        for name in ("../outside", "/absolute", "C:/escape", "a\\b", "a/../b", "a//b", "con.txt", "aux", "a./b", "x:stream", "a\x00b"):
+        """Verify that path traversal and windows special paths rejected."""
+        for name in (
+            "../outside",
+            "/absolute",
+            "C:/escape",
+            "a\\b",
+            "a/../b",
+            "a//b",
+            "con.txt",
+            "aux",
+            "a./b",
+            "x:stream",
+            "a\x00b",
+        ):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 safe_path(self.client, name)
 
     def test_private_key_is_not_served(self):
+        """Verify that private key is not served."""
         from urllib.error import HTTPError
         from urllib.request import urlopen
+
         self.initial()
         with self.assertRaises(HTTPError) as error:
             urlopen(self.url + "/../secret.pem")
         self.assertEqual(error.exception.code, 404)
 
     def test_signed_unsafe_path_is_rejected(self):
+        """Verify that signed unsafe path is rejected."""
         self.initial()
         key, _ = signing_key(self.key)
         path = self.repo / "manifest.json"
         data = json.loads(path.read_bytes())
         entry = data["payload"]["files"].pop("app.py")
         data["payload"]["files"]["../outside.exe"] = entry
-        data["signature"] = base64.b64encode(key.sign(canonical(data["payload"]))).decode()
+        data["signature"] = base64.b64encode(
+            key.sign(canonical(data["payload"]))
+        ).decode()
         path.write_bytes(canonical(data))
         with self.assertRaisesRegex(ValueError, "Unsafe"):
             self.update()
 
     def test_url_configuration(self):
-        self.assertEqual(validate_url("http://192.168.1.10:8765/"), "http://192.168.1.10:8765")
-        for url in ("file:///C:/private", "http://user:pass@host", "http://host/path", "http://host:99999"):
+        """Verify that url configuration."""
+        self.assertEqual(
+            validate_url("http://192.168.1.10:8765/"), "http://192.168.1.10:8765"
+        )
+        for url in (
+            "file:///C:/private",
+            "http://user:pass@host",
+            "http://host/path",
+            "http://host:99999",
+        ):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 validate_url(url)
 

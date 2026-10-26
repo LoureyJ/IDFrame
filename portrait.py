@@ -1,4 +1,5 @@
 """Local portrait segmentation and fixed-format, white-background export."""
+
 from pathlib import Path
 import math
 import os
@@ -15,8 +16,17 @@ OUTPUT_MM = (50.8, 50.8)
 OUTPUT_DPI = (600, 600)
 OUTPUT_SIZE = tuple(round(mm / 25.4 * dpi) for mm, dpi in zip(OUTPUT_MM, OUTPUT_DPI))
 
+# Keep model-specific dimensions and normalization next to the export contract.
+SEGMENTATION_SIZE = (320, 320)
+MATTING_MAX_SIDE = 768
+MODEL_ALIGNMENT = 32
+MIN_MODEL_SIDE = 64
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
 
 def load_photo(path):
+    """Apply EXIF orientation and composite source transparency onto white RGB pixels."""
     with Image.open(path) as source:
         photo = ImageOps.exif_transpose(source).convert("RGBA")
         # Composite transparent source files before inference.
@@ -25,21 +35,43 @@ def load_photo(path):
 
 
 class PortraitRemover:
+    """Load one local model lazily and apply its alpha mask to the original RGB pixels."""
+
     def __init__(self, model_path=None, *, model_type=None, mode="protected"):
+        """Select an available local model and defer loading its inference session."""
         if mode not in {"protected", "fine_hair"}:
             raise ValueError("Unsupported portrait removal mode")
         self.mode = mode
         if model_path is None:
-            preferred, fallback = ((HAIR_MODEL_PATH, LEGACY_MODEL_PATH) if mode == "fine_hair"
-                                   else (LEGACY_MODEL_PATH, HAIR_MODEL_PATH))
+            preferred, fallback = (
+                (HAIR_MODEL_PATH, LEGACY_MODEL_PATH)
+                if mode == "fine_hair"
+                else (LEGACY_MODEL_PATH, HAIR_MODEL_PATH)
+            )
             model_path = preferred if preferred.is_file() else fallback
         self.model_path = Path(model_path)
-        self.model_type = model_type or ("matting" if self.model_path.name == HAIR_MODEL_PATH.name else "segmentation")
+        self.model_type = model_type or (
+            "matting"
+            if self.model_path.name == HAIR_MODEL_PATH.name
+            else "segmentation"
+        )
         if self.model_type not in {"matting", "segmentation"}:
             raise ValueError("Unsupported portrait model type")
         self._session = None
 
     def remove(self, photo):
+        """Return a full-resolution RGBA cutout using the selected local model."""
+        session = self._get_session()
+        rgb = photo.convert("RGB")
+        tensor = self._prepare_tensor(rgb)
+        prediction = session.run(None, {session.get_inputs()[0].name: tensor})[0]
+        alpha = self._prediction_to_alpha(prediction, rgb.size)
+        result = rgb.convert("RGBA")
+        result.putalpha(alpha)
+        return result
+
+    def _get_session(self):
+        """Create the CPU inference session once and reuse it for subsequent photos."""
         if self._session is None:
             if not self.model_path.is_file():
                 raise FileNotFoundError(
@@ -47,26 +79,44 @@ class PortraitRemover:
                     "to the internet, then use the app offline."
                 )
             import onnxruntime as ort
+
             options = ort.SessionOptions()
             options.intra_op_num_threads = min(4, os.cpu_count() or 1)
             self._session = ort.InferenceSession(
-                str(self.model_path), sess_options=options,
+                str(self.model_path),
+                sess_options=options,
                 providers=["CPUExecutionProvider"],
             )
-        rgb = photo.convert("RGB")
+        return self._session
+
+    def _prepare_tensor(self, rgb):
+        """Resize and normalize RGB pixels for this model's expected NCHW input."""
         if self.model_type == "matting":
             # Preserve aspect ratio and much more hair detail than the old 320px square.
-            scale = 768 / max(rgb.size)
-            size = tuple(max(64, round(side * scale / 32) * 32) for side in rgb.size)
-            pixels = np.asarray(rgb.resize(size, Image.Resampling.LANCZOS), dtype=np.float32) / 127.5 - 1
-        else:
-            pixels = np.asarray(rgb.resize((320, 320), Image.Resampling.LANCZOS), dtype=np.float32)
-            pixels /= max(float(pixels.max()), 1e-6)
-            pixels = (pixels - np.array([0.485, 0.456, 0.406], dtype=np.float32)) / np.array(
-                [0.229, 0.224, 0.225], dtype=np.float32
+            scale = MATTING_MAX_SIDE / max(rgb.size)
+            size = tuple(
+                max(
+                    MIN_MODEL_SIDE,
+                    round(side * scale / MODEL_ALIGNMENT) * MODEL_ALIGNMENT,
+                )
+                for side in rgb.size
             )
-        tensor = pixels.transpose(2, 0, 1)[None].astype(np.float32)
-        prediction = self._session.run(None, {self._session.get_inputs()[0].name: tensor})[0]
+            pixels = (
+                np.asarray(rgb.resize(size, Image.Resampling.LANCZOS), dtype=np.float32)
+                / 127.5
+                - 1
+            )
+        else:
+            pixels = np.asarray(
+                rgb.resize(SEGMENTATION_SIZE, Image.Resampling.LANCZOS),
+                dtype=np.float32,
+            )
+            pixels /= max(float(pixels.max()), 1e-6)
+            pixels = (pixels - IMAGENET_MEAN) / IMAGENET_STD
+        return pixels.transpose(2, 0, 1)[None].astype(np.float32)
+
+    def _prediction_to_alpha(self, prediction, source_size):
+        """Validate model output and resize continuous opacity to the source dimensions."""
         if np.ndim(prediction) != 4 or prediction.shape[0:2] != (1, 1):
             raise ValueError("The model returned an invalid alpha shape")
         mask = np.asarray(prediction[0, 0], dtype=np.float32)
@@ -80,12 +130,9 @@ class PortraitRemover:
         # A matting model predicts real opacity. Stretching its range or binarizing
         # would destroy the partial transparency between curls and fine strands.
         mask = np.clip(mask, 0, 1)
-        alpha = Image.fromarray((mask * 255).astype(np.uint8)).resize(
-            rgb.size, Image.Resampling.LANCZOS
+        return Image.fromarray((mask * 255).astype(np.uint8)).resize(
+            source_size, Image.Resampling.LANCZOS
         )
-        result = rgb.convert("RGBA")
-        result.putalpha(alpha)
-        return result
 
 
 def choose_removal_mode(protected, fine_hair):
@@ -100,46 +147,71 @@ def choose_removal_mode(protected, fine_hair):
     scale = 256 / max(protected.size)
     size = tuple(max(1, round(value * scale)) for value in protected.size)
     silhouette = protected.getchannel("A").resize(size, Image.Resampling.BICUBIC)
-    detail = np.asarray(fine_hair.getchannel("A").resize(size, Image.Resampling.BICUBIC), dtype=np.float32) / 255
+    detail = (
+        np.asarray(
+            fine_hair.getchannel("A").resize(size, Image.Resampling.BICUBIC),
+            dtype=np.float32,
+        )
+        / 255
+    )
     person = np.asarray(silhouette, dtype=np.float32) / 255
-    radius = max(1, round(min(size) * .075))
+    radius = max(1, round(min(size) * 0.075))
     core = np.asarray(silhouette.filter(ImageFilter.MinFilter(2 * radius + 1))) > 245
-    radius = max(1, round(min(size) * .02))
+    radius = max(1, round(min(size) * 0.02))
     support = np.asarray(silhouette.filter(ImageFilter.MaxFilter(2 * radius + 1))) > 13
     metrics = {
         "core_fraction": float(core.mean()),
-        "missing_core": float((detail[core] < .5).mean()) if core.any() else 0.,
-        "core_deficit": float(np.maximum(0, person[core] - detail[core] - .15).mean()) if core.any() else 0.,
-        "background_spill": float(((detail > .8) & ~support).sum() / max(1, (person > .5).sum())),
+        "missing_core": float((detail[core] < 0.5).mean()) if core.any() else 0.0,
+        "core_deficit": (
+            float(np.maximum(0, person[core] - detail[core] - 0.15).mean())
+            if core.any()
+            else 0.0
+        ),
+        "background_spill": float(
+            ((detail > 0.8) & ~support).sum() / max(1, (person > 0.5).sum())
+        ),
     }
     # Tiny coarse detections are common in camouflaged/historical portraits.
     # They are insufficient evidence to reject a larger, valid hair-model result.
-    reliable = metrics["core_fraction"] >= .08
-    damaged = metrics["missing_core"] > .015 or metrics["core_deficit"] > .015
-    spill = metrics["background_spill"] > .02
+    reliable = metrics["core_fraction"] >= 0.08
+    damaged = metrics["missing_core"] > 0.015 or metrics["core_deficit"] > 0.015
+    spill = metrics["background_spill"] > 0.02
     mode = "protected" if reliable and (damaged or spill) else "fine_hair"
     return mode, metrics
 
 
 class AutomaticPortraitRemover:
+    """Choose one complete local-model result using mask integrity diagnostics."""
+
     def __init__(self, protected=None, fine_hair=None):
         # The GUI shares these instances with manual modes, reusing loaded sessions.
-        self.protected = protected if protected is not None else PortraitRemover(mode="protected")
-        self.fine_hair = fine_hair if fine_hair is not None else PortraitRemover(mode="fine_hair")
+        """Share manual-mode models and initialize automatic-selection diagnostics."""
+        self.protected = (
+            protected if protected is not None else PortraitRemover(mode="protected")
+        )
+        self.fine_hair = (
+            fine_hair if fine_hair is not None else PortraitRemover(mode="fine_hair")
+        )
         self.last_mode = None
         self.last_diagnostics = {}
 
     def remove(self, photo):
+        """Compare whole model candidates, falling back to the usable result on failure."""
         self.last_mode = None
         self.last_diagnostics = {}
         if self.protected.model_path.resolve() == self.fine_hair.model_path.resolve():
             result = self.protected.remove(photo)
-            self.last_mode = "fine_hair" if self.protected.model_type == "matting" else "protected"
+            self.last_mode = (
+                "fine_hair" if self.protected.model_type == "matting" else "protected"
+            )
             self.last_diagnostics = {"reason": "one_available_model"}
             return result
         protected = fine_hair = None
         errors = []
-        for model, name in [(self.protected, "protected"), (self.fine_hair, "fine_hair")]:
+        for model, name in [
+            (self.protected, "protected"),
+            (self.fine_hair, "fine_hair"),
+        ]:
             try:
                 candidate = model.remove(photo)
             except (FileNotFoundError, ValueError, RuntimeError) as error:
@@ -155,7 +227,9 @@ class AutomaticPortraitRemover:
             self.last_mode = "fine_hair" if protected is None else "protected"
             self.last_diagnostics = {"reason": "other_model_inconclusive"}
         else:
-            self.last_mode, self.last_diagnostics = choose_removal_mode(protected, fine_hair)
+            self.last_mode, self.last_diagnostics = choose_removal_mode(
+                protected, fine_hair
+            )
         return protected if self.last_mode == "protected" else fine_hair
 
 
@@ -166,8 +240,10 @@ def format_portrait(cutout):
         raise ValueError("No person detected. Try another portrait photo.")
     scaled = ImageOps.contain(rgba, OUTPUT_SIZE, Image.Resampling.LANCZOS)
     canvas = Image.new("RGBA", OUTPUT_SIZE, "white")
-    canvas.alpha_composite(scaled, ((OUTPUT_SIZE[0] - scaled.width) // 2,
-                                    (OUTPUT_SIZE[1] - scaled.height) // 2))
+    canvas.alpha_composite(
+        scaled,
+        ((OUTPUT_SIZE[0] - scaled.width) // 2, (OUTPUT_SIZE[1] - scaled.height) // 2),
+    )
     return canvas.convert("RGB")
 
 
@@ -177,18 +253,32 @@ def frame_portrait(cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE):
     Offset is measured as a fraction of the output frame, positive right/down.
     The same geometry is used for the interactive preview and full-resolution save.
     """
-    if not (math.isfinite(zoom) and 1 <= zoom <= 8 and
-            all(math.isfinite(value) for value in offset)):
+    if not (
+        math.isfinite(zoom)
+        and 1 <= zoom <= 8
+        and all(math.isfinite(value) for value in offset)
+    ):
         raise ValueError("Invalid crop framing")
     rgba = cutout.convert("RGBA")
     if rgba.getchannel("A").getbbox() is None:
         raise ValueError("No person detected. Try another portrait photo.")
     scale = min(size[0] / rgba.width, size[1] / rgba.height) * zoom
     inverse = 1 / scale
-    transform = (inverse, 0, rgba.width / 2 - (size[0] / 2 + offset[0] * size[0]) * inverse,
-                 0, inverse, rgba.height / 2 - (size[1] / 2 + offset[1] * size[1]) * inverse)
-    framed = rgba.transform(size, Image.Transform.AFFINE, transform,
-                            resample=Image.Resampling.BICUBIC, fillcolor=(0, 0, 0, 0))
+    transform = (
+        inverse,
+        0,
+        rgba.width / 2 - (size[0] / 2 + offset[0] * size[0]) * inverse,
+        0,
+        inverse,
+        rgba.height / 2 - (size[1] / 2 + offset[1] * size[1]) * inverse,
+    )
+    framed = rgba.transform(
+        size,
+        Image.Transform.AFFINE,
+        transform,
+        resample=Image.Resampling.BICUBIC,
+        fillcolor=(0, 0, 0, 0),
+    )
     canvas = Image.new("RGBA", size, "white")
     return Image.alpha_composite(canvas, framed).convert("RGB")
 

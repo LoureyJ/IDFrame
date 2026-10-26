@@ -1,0 +1,12 @@
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+force-exclude = '(training/vendor|/build/|/dist/|/\.tools/|/\.venv/|/\.training-venv/|/\.dev-venv/|app_version\.py|deployment/trust\.py)'
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = ["training/vendor", "build", "dist", ".tools", ".venv", ".training-venv", ".dev-venv", "deployment/trust.py"]
+
+[tool.ruff.lint]
+select = ["E9", "F"]

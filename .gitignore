@@ -10,6 +10,8 @@ build/
 dist/
 deployment/trust.py
 .training-venv/
+.dev-venv/
+.ruff_cache/
 training/checkpoints/
 
 # Private machine settings, photographs and credentials

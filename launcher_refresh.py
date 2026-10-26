@@ -1,4 +1,5 @@
 """Refresh the stable launcher after the installed application has exited."""
+
 import logging
 import os
 from pathlib import Path
@@ -10,7 +11,11 @@ import time
 
 
 def request_launcher_refresh():
-    if not getattr(sys, "frozen", False) or os.environ.get("PORTRAIT_STUDIO_LAUNCHER") != "1":
+    """Start a hidden refresh helper only for a changed installed launcher candidate."""
+    if (
+        not getattr(sys, "frozen", False)
+        or os.environ.get("PORTRAIT_STUDIO_LAUNCHER") != "1"
+    ):
         return
     root = Path(sys.executable).resolve().parent.parent
     candidate = root / "payload" / "PortraitLauncher.exe"
@@ -18,30 +23,49 @@ def request_launcher_refresh():
     if not candidate.is_file() or not current.is_file():
         return
     import hashlib
-    if hashlib.sha256(candidate.read_bytes()).digest() == hashlib.sha256(current.read_bytes()).digest():
+
+    if (
+        hashlib.sha256(candidate.read_bytes()).digest()
+        == hashlib.sha256(current.read_bytes()).digest()
+    ):
         return
     environment = os.environ.copy()
     environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-    subprocess.Popen([str(candidate), "--refresh-launcher"], cwd=root, env=environment,
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    subprocess.Popen(
+        [str(candidate), "--refresh-launcher"],
+        cwd=root,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
 
 
 def refresh_launcher(root, public_key, try_lock, timeout=90):
     # These imports are embedded in the frozen launcher, not required by the GUI runtime.
+    """Verify the signed candidate and replace the launcher after the previous session exits."""
     from deployment.common import digest, safe_path, verify_manifest
+
     root = Path(root).resolve()
     candidate = safe_path(root / "payload", "PortraitLauncher.exe")
     target = root / "PortraitStudio.exe"
     if target.is_symlink() or not target.is_file():
         raise ValueError("Invalid installed launcher")
-    manifest = verify_manifest((root / "installed-manifest.json").read_bytes(), public_key)["payload"]
+    manifest = verify_manifest(
+        (root / "installed-manifest.json").read_bytes(), public_key
+    )["payload"]
     expected = manifest["files"]["PortraitLauncher.exe"]
-    if candidate.stat().st_size != expected["size"] or digest(candidate) != expected["sha256"]:
+    if (
+        candidate.stat().st_size != expected["size"]
+        or digest(candidate) != expected["sha256"]
+    ):
         raise ValueError("Launcher failed signed update verification")
     if digest(target) == expected["sha256"]:
         return False
-    handle, temporary = tempfile.mkstemp(prefix=".launcher-refresh-", suffix=".exe", dir=root)
+    handle, temporary = tempfile.mkstemp(
+        prefix=".launcher-refresh-", suffix=".exe", dir=root
+    )
     os.close(handle)
     temporary = Path(temporary)
     try:
@@ -61,8 +85,10 @@ def refresh_launcher(root, public_key, try_lock, timeout=90):
                     pass
                 finally:
                     lock.close()
-            time.sleep(.2)
-        logging.getLogger("updates").warning("Launcher refresh deferred until the next session closes")
+            time.sleep(0.2)
+        logging.getLogger("updates").warning(
+            "Launcher refresh deferred until the next session closes"
+        )
         return False
     finally:
         temporary.unlink(missing_ok=True)

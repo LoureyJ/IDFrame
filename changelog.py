@@ -1,4 +1,5 @@
 """Offline release notes shipped alongside the application."""
+
 import json
 from pathlib import Path
 import tkinter as tk
@@ -6,6 +7,7 @@ from tkinter import ttk
 
 
 def show_changelog(parent, installed_version, existing=None):
+    """Open or reuse an offline version browser, selecting the installed release."""
     if existing is not None and existing.winfo_exists():
         existing.deiconify()
         existing.lift()
@@ -13,7 +15,10 @@ def show_changelog(parent, installed_version, existing=None):
         return existing
     path = Path(__file__).resolve().parent / "assets" / "changelog.json"
     releases = json.loads(path.read_text(encoding="utf-8"))
-    releases.sort(key=lambda entry: tuple(int(part) for part in entry["version"].split(".")), reverse=True)
+    releases.sort(
+        key=lambda entry: tuple(int(part) for part in entry["version"].split(".")),
+        reverse=True,
+    )
     window = tk.Toplevel(parent)
     window.withdraw()
     window.title("IDFrame — Changelog")
@@ -22,18 +27,35 @@ def show_changelog(parent, installed_version, existing=None):
     page = ttk.Frame(window, padding=20)
     page.pack(fill="both", expand=True)
     ttk.Label(page, text="Changelog", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-    ttk.Label(page, text=f"Installed version: v{installed_version}").pack(anchor="w", pady=(4, 16))
+    ttk.Label(page, text=f"Installed version: v{installed_version}").pack(
+        anchor="w", pady=(4, 16)
+    )
     body = ttk.Frame(page)
     body.pack(fill="both", expand=True)
-    versions = tk.Listbox(body, width=16, exportselection=False, font=("Segoe UI", 11),
-                          activestyle="none", borderwidth=0, highlightthickness=1)
+    versions = tk.Listbox(
+        body,
+        width=16,
+        exportselection=False,
+        font=("Segoe UI", 11),
+        activestyle="none",
+        borderwidth=0,
+        highlightthickness=1,
+    )
     versions.pack(side="left", fill="y", padx=(0, 16))
     notes_frame = ttk.Frame(body)
     notes_frame.pack(side="left", fill="both", expand=True)
     scrollbar = ttk.Scrollbar(notes_frame)
     scrollbar.pack(side="right", fill="y")
-    notes = tk.Text(notes_frame, wrap="word", font=("Segoe UI", 11), padx=14, pady=14,
-                    borderwidth=0, highlightthickness=0, yscrollcommand=scrollbar.set)
+    notes = tk.Text(
+        notes_frame,
+        wrap="word",
+        font=("Segoe UI", 11),
+        padx=14,
+        pady=14,
+        borderwidth=0,
+        highlightthickness=0,
+        yscrollcommand=scrollbar.set,
+    )
     notes.pack(fill="both", expand=True)
     scrollbar.configure(command=notes.yview)
     notes.tag_configure("heading", font=("Segoe UI", 14, "bold"), spacing3=16)
@@ -42,6 +64,7 @@ def show_changelog(parent, installed_version, existing=None):
         versions.insert("end", f"v{release['version']}")
 
     def select_release(event=None):
+        """Replace the read-only notes pane with the selected version's changes."""
         selection = versions.curselection()
         if not selection:
             return
@@ -55,18 +78,37 @@ def show_changelog(parent, installed_version, existing=None):
         notes.yview_moveto(0)
 
     versions.bind("<<ListboxSelect>>", select_release)
-    selected = next((i for i, release in enumerate(releases) if release["version"] == installed_version), 0)
+    selected = next(
+        (
+            i
+            for i, release in enumerate(releases)
+            if release["version"] == installed_version
+        ),
+        0,
+    )
     versions.selection_set(selected)
     versions.see(selected)
     select_release()
-    ttk.Button(page, text="Close", command=window.destroy).pack(anchor="e", pady=(16, 0))
+    ttk.Button(page, text="Close", command=window.destroy).pack(
+        anchor="e", pady=(16, 0)
+    )
     window.bind("<Escape>", lambda event: window.destroy())
     parent.update_idletasks()
     width, height = 720, 460
-    x = max(0, min(parent.winfo_rootx() + (parent.winfo_width() - width) // 2,
-                   parent.winfo_screenwidth() - width))
-    y = max(0, min(parent.winfo_rooty() + (parent.winfo_height() - height) // 2,
-                   parent.winfo_screenheight() - height))
+    x = max(
+        0,
+        min(
+            parent.winfo_rootx() + (parent.winfo_width() - width) // 2,
+            parent.winfo_screenwidth() - width,
+        ),
+    )
+    y = max(
+        0,
+        min(
+            parent.winfo_rooty() + (parent.winfo_height() - height) // 2,
+            parent.winfo_screenheight() - height,
+        ),
+    )
     window.geometry(f"{width}x{height}+{x}+{y}")
     window.deiconify()
     return window

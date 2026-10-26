@@ -1,4 +1,5 @@
 """Keep Windows shortcut and taskbar branding in step with OTA icon assets."""
+
 import ctypes
 import hashlib
 import json
@@ -13,7 +14,7 @@ APP_ID = "PortraitStudio.Desktop"
 
 # WScript maintains the existing shortcut's launch settings. The property store
 # assigns the same taskbar identity as the running Python application.
-SHORTCUT_SCRIPT = r'''
+SHORTCUT_SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System;
@@ -40,6 +41,7 @@ public static class PortraitShortcut {
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)]
     static extern void SHChangeNotify(uint change, uint flags, string path, IntPtr other);
     public static void SetIdentity(string path, string identity) {
+        // Assign the taskbar grouping identity to this already verified owned shortcut.
         Guid iid = typeof(IPortraitProperties).GUID;
         IPortraitProperties store;
         Marshal.ThrowExceptionForHR(SHGetPropertyStoreFromParsingName(path, IntPtr.Zero, 2, ref iid, out store));
@@ -95,16 +97,19 @@ foreach ($path in $paths) {
     $updated++
 }
 Write-Output $updated
-'''
+"""
 
 
 def set_taskbar_identity():
+    """Assign the stable Windows application identity used by existing client shortcuts."""
     if os.name == "nt":
         setter = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
         setter.argtypes = [ctypes.c_wchar_p]
         setter.restype = ctypes.c_long
         if setter(APP_ID) < 0:
-            logging.getLogger(__name__).warning("Windows could not set the IDFrame taskbar identity")
+            logging.getLogger(__name__).warning(
+                "Windows could not set the IDFrame taskbar identity"
+            )
 
 
 def repair_shortcut_icons(install_root, assets, shortcut_paths=None):
@@ -135,14 +140,37 @@ def repair_shortcut_icons(install_root, assets, shortcut_paths=None):
         temporary.write_bytes(data)
         temporary.replace(icon)
     environment = os.environ.copy()
-    environment.update({"PORTRAIT_BRAND_LAUNCHER": str(launcher),
-                        "PORTRAIT_BRAND_RUNTIME": str(install_root / "payload" / "PortraitRuntime.exe"),
-                        "PORTRAIT_BRAND_ICON": str(icon), "PORTRAIT_BRAND_APP_ID": APP_ID})
-    environment["PORTRAIT_BRAND_TEST_PATHS"] = json.dumps([str(Path(p).resolve()) for p in shortcut_paths]) if shortcut_paths is not None else ""
-    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    result = subprocess.run([str(powershell), "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
-                            env=environment, capture_output=True, text=True, timeout=20,
-                            creationflags=subprocess.CREATE_NO_WINDOW, check=True)
+    environment.update(
+        {
+            "PORTRAIT_BRAND_LAUNCHER": str(launcher),
+            "PORTRAIT_BRAND_RUNTIME": str(
+                install_root / "payload" / "PortraitRuntime.exe"
+            ),
+            "PORTRAIT_BRAND_ICON": str(icon),
+            "PORTRAIT_BRAND_APP_ID": APP_ID,
+        }
+    )
+    environment["PORTRAIT_BRAND_TEST_PATHS"] = (
+        json.dumps([str(Path(p).resolve()) for p in shortcut_paths])
+        if shortcut_paths is not None
+        else ""
+    )
+    powershell = (
+        Path(os.environ["SystemRoot"])
+        / "System32"
+        / "WindowsPowerShell"
+        / "v1.0"
+        / "powershell.exe"
+    )
+    result = subprocess.run(
+        [str(powershell), "-NoProfile", "-NonInteractive", "-Command", SHORTCUT_SCRIPT],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=20,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        check=True,
+    )
     count = int(result.stdout.strip())
     if shortcut_paths is None:
         temporary = state.with_suffix(".tmp")
@@ -153,6 +181,7 @@ def repair_shortcut_icons(install_root, assets, shortcut_paths=None):
 
 def sync_installed_shortcuts(assets):
     # Source/dev sessions must not edit the installed user's shortcuts.
+    """Refresh owned installed shortcuts while leaving source sessions and other apps alone."""
     if not getattr(sys, "frozen", False):
         return
     install_root = Path(sys.executable).resolve().parent.parent
@@ -160,4 +189,6 @@ def sync_installed_shortcuts(assets):
         repair_shortcut_icons(install_root, assets)
     except (OSError, ValueError, subprocess.SubprocessError):
         # Branding must never prevent opening a photo or running offline.
-        logging.getLogger(__name__).exception("Could not refresh IDFrame shortcut icons")
+        logging.getLogger(__name__).exception(
+            "Could not refresh IDFrame shortcut icons"
+        )

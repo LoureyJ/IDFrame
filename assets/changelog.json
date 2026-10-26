@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.13",
+    "changes": [
+      "Refactored window setup, model preprocessing, release payload assembly, and update staging into smaller documented functions while preserving existing workflows.",
+      "Added purpose docstrings throughout maintained application, deployment, training, and test code, along with consistent formatting and a contributor code map.",
+      "Added development-only formatting, lint, and function-documentation checks. Photo dimensions, removal models, naming rules, and LAN update compatibility remain unchanged."
+    ]
+  },
+  {
     "version": "1.1.12",
     "changes": [
       "Renamed Portrait Studio to IDFrame in the application, changelog, and update messages.",

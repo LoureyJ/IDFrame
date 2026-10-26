@@ -1,3 +1,5 @@
+"""Shared deterministic encoding, file integrity, and signed-manifest validation."""
+
 import base64
 import hashlib
 import json
@@ -11,10 +13,12 @@ MAX_MANIFEST = 4 * 1024 * 1024
 
 
 def canonical(value):
+    """Encode deterministic UTF-8 JSON for manifest signatures and build fingerprints."""
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def digest(path):
+    """Return a file's SHA-256 checksum using bounded memory."""
     result = hashlib.sha256()
     with Path(path).open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
@@ -23,6 +27,7 @@ def digest(path):
 
 
 def atomic_write(path, content):
+    """Flush bytes to a sibling temporary file and atomically replace the destination."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
@@ -38,11 +43,28 @@ def safe_path(root, name):
     if not isinstance(name, str):
         raise ValueError("Update paths must be strings")
     parts = PurePosixPath(name).parts
-    if (not name or "\\" in name or ":" in name
-            or name.startswith("/") or not parts or "/".join(parts) != name
-            or any(p in (".", "..") or p.endswith((".", " ")) for p in parts)
-            or any(re.search(r'[<>"|?*\x00-\x1f]', p) for p in parts)
-            or any(p.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *[f"COM{i}" for i in range(1, 10)], *[f"LPT{i}" for i in range(1, 10)]} for p in parts)):
+    if (
+        not name
+        or "\\" in name
+        or ":" in name
+        or name.startswith("/")
+        or not parts
+        or "/".join(parts) != name
+        or any(p in (".", "..") or p.endswith((".", " ")) for p in parts)
+        or any(re.search(r'[<>"|?*\x00-\x1f]', p) for p in parts)
+        or any(
+            p.split(".")[0].upper()
+            in {
+                "CON",
+                "PRN",
+                "AUX",
+                "NUL",
+                *[f"COM{i}" for i in range(1, 10)],
+                *[f"LPT{i}" for i in range(1, 10)],
+            }
+            for p in parts
+        )
+    ):
         raise ValueError(f"Unsafe update path: {name!r}")
     root = Path(root).resolve()
     target = root.joinpath(*parts)
@@ -52,13 +74,20 @@ def safe_path(root, name):
 
 
 def verify_manifest(raw, public_key):
+    """Verify the signature and reject unsupported, conflicting, or unsafe file entries."""
     if len(raw) > MAX_MANIFEST:
         raise ValueError("Manifest is too large")
     envelope = json.loads(raw)
     payload = envelope["payload"]
     signature = base64.b64decode(envelope["signature"], validate=True)
-    Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key)).verify(signature, canonical(payload))
-    if payload.get("schema") != 1 or type(payload.get("generation")) is not int or payload["generation"] < 1:
+    Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key)).verify(
+        signature, canonical(payload)
+    )
+    if (
+        payload.get("schema") != 1
+        or type(payload.get("generation")) is not int
+        or payload["generation"] < 1
+    ):
         raise ValueError("Unsupported update manifest")
     files = payload["files"]
     if not isinstance(files, dict) or len(files) > 20000 or not files:
@@ -67,7 +96,9 @@ def verify_manifest(raw, public_key):
     for name, entry in files.items():
         safe_path(Path.cwd(), name)
         lowered = name.casefold()
-        if lowered in seen or any(lowered.startswith(p + "/") or p.startswith(lowered + "/") for p in seen):
+        if lowered in seen or any(
+            lowered.startswith(p + "/") or p.startswith(lowered + "/") for p in seen
+        ):
             raise ValueError("Conflicting update paths")
         seen.add(lowered)
         if not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):

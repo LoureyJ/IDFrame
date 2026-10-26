@@ -1,7 +1,7 @@
 """Build a client installer or publish an incremental application release."""
+
 import argparse
 import importlib.metadata
-import json
 import os
 from pathlib import Path
 import re
@@ -22,10 +22,12 @@ CLIENT = ROOT / "dist" / "client"
 
 
 def run(args):
+    """Run a build command from the project directory and stop on failure."""
     subprocess.run([str(a) for a in args], cwd=ROOT, check=True)
 
 
 def remove_build_dir(path):
+    """Remove only an explicitly allowed generated build directory."""
     path = Path(path).resolve()
     # Only remove named generated directories inside this workspace.
     if path not in {(BUILD / "runtime-dist").resolve(), (CLIENT / "payload").resolve()}:
@@ -35,8 +37,13 @@ def remove_build_dir(path):
 
 
 def compiler_path():
+    """Locate the bundled or installed Inno Setup compiler for installer builds."""
     candidates = [ROOT / ".tools" / "inno" / "ISCC.exe"]
-    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
+    for base in (
+        os.environ.get("ProgramFiles(x86)"),
+        os.environ.get("ProgramFiles"),
+        os.environ.get("LOCALAPPDATA"),
+    ):
         if base:
             candidates.extend(Path(base).glob("Inno Setup*/ISCC.exe"))
             candidates.extend(Path(base).glob("Programs/Inno Setup*/ISCC.exe"))
@@ -45,52 +52,160 @@ def compiler_path():
     for candidate in candidates:
         if candidate.is_file():
             return candidate
-    raise RuntimeError("Inno Setup compiler is missing. Install Inno Setup, then rerun build_installer.bat.")
+    raise RuntimeError(
+        "Inno Setup compiler is missing. Install Inno Setup, then rerun build_installer.bat."
+    )
 
 
 def build_runtime(force=False):
-    fingerprint = canonical({"runtime": digest(ROOT / "deployment" / "runtime.py"),
-                             "icon": digest(ROOT / "assets" / "portrait-studio.ico"),
-                             "packages": sorted((d.metadata["Name"], d.version) for d in importlib.metadata.distributions())})
+    """Reuse or rebuild the frozen CPU runtime when its inputs change."""
+    fingerprint = canonical(
+        {
+            "runtime": digest(ROOT / "deployment" / "runtime.py"),
+            "icon": digest(ROOT / "assets" / "portrait-studio.ico"),
+            "packages": sorted(
+                (d.metadata["Name"], d.version)
+                for d in importlib.metadata.distributions()
+            ),
+        }
+    )
     stamp = BUILD / "runtime-fingerprint.json"
     runtime_dir = BUILD / "runtime-dist" / "PortraitRuntime"
-    if force or not stamp.exists() or stamp.read_bytes() != fingerprint or not runtime_dir.exists():
+    if (
+        force
+        or not stamp.exists()
+        or stamp.read_bytes() != fingerprint
+        or not runtime_dir.exists()
+    ):
         remove_build_dir(BUILD / "runtime-dist")
-        run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--onedir", "--windowed", "--noupx",
-             "--icon", ROOT / "assets" / "portrait-studio.ico",
-             "--name", "PortraitRuntime", "--distpath", BUILD / "runtime-dist",
-             "--workpath", BUILD / "pyinstaller-runtime", "--specpath", BUILD,
-             "--hidden-import", "numpy", "--hidden-import", "onnxruntime",
-             "--hidden-import", "PIL.ImageTk", "--hidden-import", "PIL.ImageOps",
-             "--hidden-import", "tkinter.filedialog", "--hidden-import", "tkinter.messagebox",
-             "--hidden-import", "tkinter.ttk", "--collect-binaries", "onnxruntime",
-             ROOT / "deployment" / "runtime.py"])
+        run(
+            [
+                sys.executable,
+                "-m",
+                "PyInstaller",
+                "--noconfirm",
+                "--onedir",
+                "--windowed",
+                "--noupx",
+                "--icon",
+                ROOT / "assets" / "portrait-studio.ico",
+                "--name",
+                "PortraitRuntime",
+                "--distpath",
+                BUILD / "runtime-dist",
+                "--workpath",
+                BUILD / "pyinstaller-runtime",
+                "--specpath",
+                BUILD,
+                "--hidden-import",
+                "numpy",
+                "--hidden-import",
+                "onnxruntime",
+                "--hidden-import",
+                "PIL.ImageTk",
+                "--hidden-import",
+                "PIL.ImageOps",
+                "--hidden-import",
+                "tkinter.filedialog",
+                "--hidden-import",
+                "tkinter.messagebox",
+                "--hidden-import",
+                "tkinter.ttk",
+                "--collect-binaries",
+                "onnxruntime",
+                ROOT / "deployment" / "runtime.py",
+            ]
+        )
         atomic_write(stamp, fingerprint)
     return runtime_dir
 
 
 def build_launcher():
-    sources = [ROOT / "deployment" / name for name in ("launcher.py", "updater.py", "common.py", "trust.py")]
-    sources += [ROOT / "windows_branding.py", ROOT / "launcher_refresh.py", ROOT / "assets/portrait-studio.ico"]
-    fingerprint = canonical({"files": {p.relative_to(ROOT).as_posix(): digest(p) for p in sources},
-                             "packages": sorted((d.metadata["Name"], d.version) for d in importlib.metadata.distributions())})
+    """Reuse or rebuild the windowed updater launcher when its inputs change."""
+    sources = [
+        ROOT / "deployment" / name
+        for name in ("launcher.py", "updater.py", "common.py", "trust.py")
+    ]
+    sources += [
+        ROOT / "windows_branding.py",
+        ROOT / "launcher_refresh.py",
+        ROOT / "assets/portrait-studio.ico",
+    ]
+    fingerprint = canonical(
+        {
+            "files": {p.relative_to(ROOT).as_posix(): digest(p) for p in sources},
+            "packages": sorted(
+                (d.metadata["Name"], d.version)
+                for d in importlib.metadata.distributions()
+            ),
+        }
+    )
     stamp = BUILD / "launcher-fingerprint.json"
     executable = BUILD / "launcher-dist" / "PortraitStudio.exe"
-    if not stamp.exists() or stamp.read_bytes() != fingerprint or not executable.is_file():
-        run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--onefile", "--windowed", "--noupx",
-             "--icon", ROOT / "assets" / "portrait-studio.ico",
-             "--name", "PortraitStudio", "--paths", ROOT, "--distpath", BUILD / "launcher-dist",
-             "--workpath", BUILD / "pyinstaller-launcher", "--specpath", BUILD,
-             ROOT / "deployment" / "launcher.py"])
+    if (
+        not stamp.exists()
+        or stamp.read_bytes() != fingerprint
+        or not executable.is_file()
+    ):
+        run(
+            [
+                sys.executable,
+                "-m",
+                "PyInstaller",
+                "--noconfirm",
+                "--onefile",
+                "--windowed",
+                "--noupx",
+                "--icon",
+                ROOT / "assets" / "portrait-studio.ico",
+                "--name",
+                "PortraitStudio",
+                "--paths",
+                ROOT,
+                "--distpath",
+                BUILD / "launcher-dist",
+                "--workpath",
+                BUILD / "pyinstaller-launcher",
+                "--specpath",
+                BUILD,
+                ROOT / "deployment" / "launcher.py",
+            ]
+        )
         atomic_write(stamp, fingerprint)
     return executable
 
 
+def assemble_payload(runtime, launcher):
+    """Copy the runtime, editable modules, models, assets, and launcher candidate."""
+    payload = CLIENT / "payload"
+    remove_build_dir(payload)
+    shutil.copytree(runtime, payload)
+    # Source modules are independent files: ordinary code edits transfer only those files.
+    for source in ROOT.glob("*.py"):
+        if source.name not in {"build_release.py", "download_model.py"}:
+            compile(source.read_bytes(), str(source), "exec")
+            shutil.copy2(source, payload / source.name)
+    shutil.copytree(
+        ROOT / "models", payload / "models", ignore=shutil.ignore_patterns("*.download")
+    )
+    if (ROOT / "assets").is_dir():
+        shutil.copytree(ROOT / "assets", payload / "assets")
+    # Old clients receive a verified candidate through their existing updater.
+    # The new application activates it safely after their current session ends.
+    shutil.copy2(launcher, payload / "PortraitLauncher.exe")
+    return payload
+
+
 def main():
+    """Validate settings, acquire the release lock, and prepare, stage, or publish as requested."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--installer", action="store_true")
     parser.add_argument("--rebuild-runtime", action="store_true")
-    parser.add_argument("--prepare-only", action="store_true", help="Prepare the client version without building or publishing")
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Prepare the client version without building or publishing",
+    )
     args = parser.parse_args()
     settings = sync_host_address(ROOT)
     version = settings["version"]
@@ -108,6 +223,7 @@ def main():
     CLIENT.mkdir(parents=True, exist_ok=True)
     # Serialize publication, installer assembly and key creation.
     import msvcrt
+
     with (HOST / "publish.lock").open("a+b") as lock:
         lock.seek(0)
         lock.write(b"0")
@@ -119,41 +235,53 @@ def main():
             parser.error("Another release build is running")
         version = prepare_version(ROOT)
         if args.prepare_only:
-            print(f"Client v{version} prepared. No installer built and no OTA release published.")
+            print(
+                f"Client v{version} prepared. No installer built and no OTA release published."
+            )
             return
         _, public = signing_key(HOST / "signing-key.pem")
-        atomic_write(ROOT / "deployment" / "trust.py", f'PUBLIC_KEY = "{public}"\n'.encode())
+        atomic_write(
+            ROOT / "deployment" / "trust.py", f'PUBLIC_KEY = "{public}"\n'.encode()
+        )
         runtime = build_runtime(args.rebuild_runtime)
-        payload = CLIENT / "payload"
-        remove_build_dir(payload)
-        shutil.copytree(runtime, payload)
-        # Source modules are independent files: ordinary code edits transfer only those files.
-        for source in ROOT.glob("*.py"):
-            if source.name not in {"build_release.py", "download_model.py"}:
-                compile(source.read_bytes(), str(source), "exec")
-                shutil.copy2(source, payload / source.name)
-        shutil.copytree(ROOT / "models", payload / "models", ignore=shutil.ignore_patterns("*.download"))
-        if (ROOT / "assets").is_dir():
-            shutil.copytree(ROOT / "assets", payload / "assets")
         launcher = build_launcher()
-        # Old clients receive a verified candidate through their existing updater.
-        # The new application activates it safely after their current session ends.
-        shutil.copy2(launcher, payload / "PortraitLauncher.exe")
+        payload = assemble_payload(runtime, launcher)
         # Building an installer must not publish to the live OTA channel.
-        repository = BUILD / "installer-repository" if args.installer else HOST / "repository"
-        raw, public, new_blobs = publish(payload, repository, HOST / "signing-key.pem", version)
+        repository = (
+            BUILD / "installer-repository" if args.installer else HOST / "repository"
+        )
+        raw, public, new_blobs = publish(
+            payload, repository, HOST / "signing-key.pem", version
+        )
         atomic_write(CLIENT / "installed-manifest.json", raw)
         atomic_write(CLIENT / "client.json", canonical({"host_url": url}))
         action = "Staged installer" if args.installer else "Published"
-        print(f"{action} v{version}: {new_blobs} new or changed file contents. Host: {url}", flush=True)
+        print(
+            f"{action} v{version}: {new_blobs} new or changed file contents. Host: {url}",
+            flush=True,
+        )
         if args.installer:
             shutil.copy2(launcher, CLIENT / "PortraitStudio.exe")
-            run([compiler_path(), f"/DClientDir={CLIENT}", f"/DOutputDir={ROOT / 'dist' / 'installer'}",
-                 f"/DAppVersion={version}", f"/DHostURL={url}", ROOT / "deployment" / "installer.iss"])
+            run(
+                [
+                    compiler_path(),
+                    f"/DClientDir={CLIENT}",
+                    f"/DOutputDir={ROOT / 'dist' / 'installer'}",
+                    f"/DAppVersion={version}",
+                    f"/DHostURL={url}",
+                    ROOT / "deployment" / "installer.iss",
+                ]
+            )
             print(f"Installer ready in {ROOT / 'dist' / 'installer'}", flush=True)
-            print("Live OTA release unchanged. Run update.bat when you want to publish this version.", flush=True)
+            print(
+                "Live OTA release unchanged. Run update.bat when you want to publish this version.",
+                flush=True,
+            )
         else:
-            print("Clients receive this release the next time they open the desktop shortcut.", flush=True)
+            print(
+                "Clients receive this release the next time they open the desktop shortcut.",
+                flush=True,
+            )
 
 
 if __name__ == "__main__":

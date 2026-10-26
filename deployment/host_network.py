@@ -1,4 +1,5 @@
 """Follow this host PC's active LAN address without changing remote clients."""
+
 import ipaddress
 import json
 import msvcrt
@@ -11,12 +12,18 @@ from deployment.common import atomic_write
 def detect_lan_ip():
     # UDP connect asks Windows to select its outgoing interface; no data is sent
     # and no response or internet connection is required.
+    """Ask routing for a usable local IPv4 address without sending network data."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
             connection.connect(("192.0.2.1", 9))
             address = connection.getsockname()[0]
         parsed = ipaddress.ip_address(address)
-        if not (parsed.is_loopback or parsed.is_link_local or parsed.is_unspecified or parsed.is_multicast):
+        if not (
+            parsed.is_loopback
+            or parsed.is_link_local
+            or parsed.is_unspecified
+            or parsed.is_multicast
+        ):
             return address
     except OSError:
         pass
@@ -24,6 +31,7 @@ def detect_lan_ip():
 
 
 def sync_host_address(root):
+    """Synchronize host settings under the release lock when automatic IP detection is enabled."""
     root = Path(root)
     path = root / "host_settings.json"
     settings = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -50,6 +58,7 @@ def sync_host_address(root):
 
 
 def _sync_locked(root, path, settings):
+    """Update the active host IP and its explicitly bound local client while holding the lock."""
     address = detect_lan_ip()
     if address is None:
         return settings
@@ -68,11 +77,14 @@ def _sync_locked(root, path, settings):
                 url = f"http://{address}:{settings['port']}"
                 if client.get("host_url") != url:
                     client["host_url"] = url
-                    atomic_write(client_path, (json.dumps(client, indent=2) + "\n").encode())
+                    atomic_write(
+                        client_path, (json.dumps(client, indent=2) + "\n").encode()
+                    )
     return settings
 
 
 def watch_host_address(root, stop, interval=3):
+    """Retry host address synchronization until the shutdown event is set."""
     while not stop.wait(interval):
         try:
             sync_host_address(root)
