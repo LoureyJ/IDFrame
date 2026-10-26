@@ -11,6 +11,54 @@ from windows_branding import APP_ID, repair_shortcut_icons, sync_installed_short
 
 @unittest.skipUnless(os.name == "nt", "Windows shortcut integration")
 class WindowsBrandingTests(unittest.TestCase):
+    def test_pinned_filename_is_preserved_and_existing_branded_shortcut_is_not_overwritten(
+        self,
+    ):
+        """Keep taskbar pins valid and preserve a conflicting shortcut owned by another app."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            launcher = root / "PortraitStudio.exe"
+            launcher.write_bytes(b"test")
+            appdata = root / "AppData"
+            pins = (
+                appdata / "Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar"
+            )
+            pins.mkdir(parents=True)
+            pinned = pins / "Portrait Studio.lnk"
+            old = root / "Portrait Studio.lnk"
+            branded = root / "IDFrame.lnk"
+            environment = os.environ.copy()
+            environment["IDFRAME_TEST_SHORTCUTS"] = json.dumps(
+                [
+                    {"path": str(pinned), "target": str(launcher)},
+                    {"path": str(old), "target": str(launcher)},
+                    {"path": str(branded), "target": str(root / "other.exe")},
+                ]
+            )
+            subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "$s=New-Object -ComObject WScript.Shell; foreach($i in ($env:IDFRAME_TEST_SHORTCUTS | ConvertFrom-Json)) { $l=$s.CreateShortcut($i.path); $l.TargetPath=$i.target; $l.Save() }",
+                ],
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            original_branded = branded.read_bytes()
+            with patch.dict(os.environ, {"APPDATA": str(appdata)}):
+                count = repair_shortcut_icons(
+                    root,
+                    Path(__file__).resolve().parents[1] / "assets",
+                    [old, pinned, branded],
+                )
+            self.assertEqual(count, 2)
+            self.assertTrue(pinned.exists())
+            self.assertTrue(old.exists())
+            self.assertEqual(branded.read_bytes(), original_branded)
+
     def test_shortcuts_receive_camera_icon_and_taskbar_identity(self):
         # Test shell-link files in a temporary directory, never the real desktop.
         """Verify that shortcuts receive camera icon and taskbar identity."""

@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.14",
+    "changes": [
+      "Added a live Brightness slider before saving: below 100% darkens the portrait and above 100% lightens it. The saved photo uses the selected brightness while its background stays white.",
+      "Reset and opening a new photo restore neutral brightness. Adjusting brightness does not rerun background removal or modify the original file.",
+      "Fixed the shortcut rename notification that could leave an undeletable Portrait Studio ghost icon in Windows Explorer. Pinned taskbar shortcut filenames are preserved, and unrelated existing shortcuts are not overwritten."
+    ]
+  },
+  {
     "version": "1.1.13",
     "changes": [
       "Refactored window setup, model preprocessing, release payload assembly, and update staging into smaller documented functions while preserving existing workflows.",

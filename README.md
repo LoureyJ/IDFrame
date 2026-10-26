@@ -28,8 +28,11 @@ has a **solid white background**, measures **1200 × 1200 pixels**, and stores *
 print-resolution metadata for a **2 × 2 inch photo**.
 Photos initially fit proportionally in the square. After removing the background,
 use the Zoom slider or mouse wheel and drag the crop preview to enlarge and position
-the person. Reset restores the full photo framing. Saving uses the selected crop
-and the full-resolution cutout; the original photo is preserved.
+the person. Use **Brightness** to lighten or darken the portrait before saving:
+100% is neutral, values below 100% are darker, and values above 100% are lighter.
+The white background stays white. Reset restores full photo framing and neutral
+brightness. Saving uses the selected crop and brightness from the full-resolution
+cutout; the original photo is preserved. Opening a new photo resets brightness.
 
 ## Client installers and LAN updates
 

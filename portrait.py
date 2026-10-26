@@ -23,6 +23,8 @@ MODEL_ALIGNMENT = 32
 MIN_MODEL_SIDE = 64
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+MIN_BRIGHTNESS = 0.25
+MAX_BRIGHTNESS = 2.0
 
 
 def load_photo(path):
@@ -247,11 +249,14 @@ def format_portrait(cutout):
     return canvas.convert("RGB")
 
 
-def frame_portrait(cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE):
+def frame_portrait(
+    cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE, *, brightness=1.0
+):
     """Render a movable square crop from source pixels, without allocating a huge zoomed image.
 
     Offset is measured as a fraction of the output frame, positive right/down.
     The same geometry is used for the interactive preview and full-resolution save.
+    Brightness changes portrait RGB only; opacity and the white background are preserved.
     """
     if not (
         math.isfinite(zoom)
@@ -259,6 +264,11 @@ def frame_portrait(cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE):
         and all(math.isfinite(value) for value in offset)
     ):
         raise ValueError("Invalid crop framing")
+    if (
+        not math.isfinite(brightness)
+        or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS
+    ):
+        raise ValueError("Invalid portrait brightness")
     rgba = cutout.convert("RGBA")
     if rgba.getchannel("A").getbbox() is None:
         raise ValueError("No person detected. Try another portrait photo.")
@@ -279,6 +289,14 @@ def frame_portrait(cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE):
         resample=Image.Resampling.BICUBIC,
         fillcolor=(0, 0, 0, 0),
     )
+    if brightness != 1.0:
+        # Adjust before compositing so darkening never turns the white backdrop grey.
+        # A lookup table uses the existing bundled Pillow core, so older runtimes
+        # can receive this feature through OTA without new packaged dependencies.
+        levels = [min(255, int(value * brightness)) for value in range(256)]
+        adjusted = framed.convert("RGB").point(levels * 3)
+        adjusted.putalpha(framed.getchannel("A"))
+        framed = adjusted
     canvas = Image.new("RGBA", size, "white")
     return Image.alpha_composite(canvas, framed).convert("RGB")
 

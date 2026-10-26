@@ -5,7 +5,7 @@ from tkinter import ttk
 
 from PIL import ImageTk
 
-from portrait import frame_portrait
+from portrait import MAX_BRIGHTNESS, MIN_BRIGHTNESS, frame_portrait
 
 
 class CropPreview(ttk.Frame):
@@ -21,6 +21,8 @@ class CropPreview(ttk.Frame):
         self.frame_side = 1
         self.zoom = tk.DoubleVar(self, value=1.0)
         self.zoom_text = tk.StringVar(self, value="100%")
+        self.brightness = tk.DoubleVar(self, value=1.0)
+        self.brightness_text = tk.StringVar(self, value="100%")
         self.canvas = tk.Canvas(
             self,
             background="#e3e7ee",
@@ -47,10 +49,26 @@ class CropPreview(ttk.Frame):
             controls, text="Reset", command=self.reset, state="disabled"
         )
         self.reset_button.pack(side="right")
+        brightness_controls = ttk.Frame(self)
+        brightness_controls.pack(fill="x", pady=(8, 0))
+        ttk.Label(brightness_controls, text="Brightness").pack(side="left")
+        self.brightness_slider = ttk.Scale(
+            brightness_controls,
+            from_=MIN_BRIGHTNESS,
+            to=MAX_BRIGHTNESS,
+            variable=self.brightness,
+            command=self.changed,
+            state="disabled",
+        )
+        self.brightness_slider.pack(side="left", fill="x", expand=True, padx=8)
+        ttk.Label(brightness_controls, textvariable=self.brightness_text, width=5).pack(
+            side="right"
+        )
         ttk.Label(
             self,
-            text="Drag the photo to position it inside the square.",
+            text="Drag to position. Brightness: below 100% darker, above 100% lighter.",
             font=("Segoe UI", 9),
+            wraplength=400,
         ).pack(anchor="w", pady=(4, 0))
         self.canvas.bind("<Configure>", self.changed)
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
@@ -65,11 +83,13 @@ class CropPreview(ttk.Frame):
         self.reset()
         state = "normal" if cutout is not None else "disabled"
         self.slider.configure(state=state)
+        self.brightness_slider.configure(state=state)
         self.reset_button.configure(state=state)
 
     def reset(self):
-        """Restore the initial zoom, centered position, and idle drag state."""
+        """Restore neutral brightness, initial zoom, centered position, and idle drag state."""
         self.zoom.set(1.0)
+        self.brightness.set(1.0)
         self.offset = (0.0, 0.0)
         self.drag = None
         self.changed()
@@ -77,6 +97,7 @@ class CropPreview(ttk.Frame):
     def changed(self, *args):
         """Clamp panning, refresh the zoom label, and coalesce redraw requests."""
         self.zoom_text.set(f"{self.zoom.get():.0%}")
+        self.brightness_text.set(f"{self.brightness.get():.0%}")
         if self.cutout is not None:
             maximum = max(self.cutout.size)
             limits = tuple(
@@ -108,7 +129,13 @@ class CropPreview(ttk.Frame):
             )
             return
         self.display = ImageTk.PhotoImage(
-            frame_portrait(self.cutout, self.zoom.get(), self.offset, (side, side)),
+            frame_portrait(
+                self.cutout,
+                self.zoom.get(),
+                self.offset,
+                (side, side),
+                brightness=self.brightness.get(),
+            ),
             master=self,
         )
         self.canvas.create_image(width / 2, height / 2, image=self.display)
@@ -151,7 +178,9 @@ class CropPreview(ttk.Frame):
 
     def export(self):
         """Render the selected framing from source pixels at the fixed print dimensions."""
-        return frame_portrait(self.cutout, self.zoom.get(), self.offset)
+        return frame_portrait(
+            self.cutout, self.zoom.get(), self.offset, brightness=self.brightness.get()
+        )
 
     def destroy(self):
         """Cancel any scheduled redraw before destroying the crop widgets."""

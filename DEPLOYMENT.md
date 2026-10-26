@@ -58,6 +58,10 @@ The legacy directory name is retained for update compatibility. From v1.1.12,
 the application displays IDFrame and renames its owned shortcuts when the new
 name is unused. Future installer builds use IDFrame branding. Existing installer
 files are preserved. GitHub source releases do not publish the LAN OTA repository.
+From v1.1.14, shortcut renames notify Explorer about both the old and new entries
+to prevent a stale, undeletable desktop icon. Existing taskbar pin filenames are
+preserved so Windows can continue to resolve them. Missing legacy desktop entries
+are also invalidated when installed shortcut branding is refreshed.
 It does not require administrator privileges; updates can write to that same folder.
 The bundled model is included, so the initial installation works offline too.
 The installer is for 64-bit Windows 10/11. It is not Authenticode-signed; signing
@@ -77,7 +81,9 @@ Windows installers for your organization requires your own code-signing certific
 The application title and heading display the installed client version. The generated
 `app_version.py` file is updated and delivered with each release. For local code changes,
 `build_release.py --prepare-only` reserves the new version without building an installer
-or touching the live OTA manifest. Current source prepares v1.1.11 with person-based automatic filenames, automatic host IP synchronization, automatic selection between Protect person / Fine hair modes, zoomable 2 × 2 crop framing, the versioned changelog, camo/low-quality
+or touching the live OTA manifest. Current source prepares v1.1.14 with brightness adjustment,
+Explorer shortcut refresh, person-based automatic filenames, automatic host IP synchronization,
+automatic selection between Protect person / Fine hair modes, zoomable 2 × 2 crop framing, the versioned changelog, camo/low-quality
 adapted matting model, centered update dialog, and the 2 × 2 inch,
 1200 × 1200 pixel export at 600 DPI; the preserved v1.1 installer has the earlier 208 × 208 export.
 

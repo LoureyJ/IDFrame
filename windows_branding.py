@@ -40,6 +40,15 @@ public static class PortraitShortcut {
         uint flags, ref Guid iid, out IPortraitProperties store);
     [DllImport("shell32.dll", CharSet=CharSet.Unicode)]
     static extern void SHChangeNotify(uint change, uint flags, string path, IntPtr other);
+    public static void NotifyDeleted(string path) {
+        // Remove a missing shortcut from Explorer's cached desktop view.
+        SHChangeNotify(0x4, 0x1005, path, IntPtr.Zero);
+    }
+    public static void NotifyRenamed(string oldPath, string newPath) {
+        // Notify both directory entries; updating only the old item leaves a ghost icon.
+        NotifyDeleted(oldPath);
+        SHChangeNotify(0x2, 0x1005, newPath, IntPtr.Zero);
+    }
     public static void SetIdentity(string path, string identity) {
         // Assign the taskbar grouping identity to this already verified owned shortcut.
         Guid iid = typeof(IPortraitProperties).GUID;
@@ -76,8 +85,14 @@ if ($env:PORTRAIT_BRAND_TEST_PATHS) {
 }
 $shell = New-Object -ComObject WScript.Shell
 $updated = 0
+$pins = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
 foreach ($path in $paths) {
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        if ([IO.Path]::GetFileName($path) -eq 'Portrait Studio.lnk') {
+            [PortraitShortcut]::NotifyDeleted($path)
+        }
+        continue
+    }
     $link = $shell.CreateShortcut($path)
     if (-not $link.TargetPath) { continue }
     $target = [IO.Path]::GetFullPath($link.TargetPath)
@@ -88,10 +103,12 @@ foreach ($path in $paths) {
     $link.IconLocation = $env:PORTRAIT_BRAND_ICON + ',0'
     $link.Save()
     [PortraitShortcut]::SetIdentity($path, $env:PORTRAIT_BRAND_APP_ID)
-    if ([IO.Path]::GetFileName($path) -eq 'Portrait Studio.lnk') {
+    if ([IO.Path]::GetFileName($path) -eq 'Portrait Studio.lnk' -and
+        [IO.Path]::GetDirectoryName($path) -ne $pins) {
         $renamed = Join-Path ([IO.Path]::GetDirectoryName($path)) 'IDFrame.lnk'
         if (-not (Test-Path -LiteralPath $renamed)) {
             Move-Item -LiteralPath $path -Destination $renamed
+            [PortraitShortcut]::NotifyRenamed($path, $renamed)
         }
     }
     $updated++
@@ -127,7 +144,7 @@ def repair_shortcut_icons(install_root, assets, shortcut_paths=None):
     directory = install_root / ".branding"
     directory.mkdir(exist_ok=True)
     state = directory / "state.json"
-    expected = {"icon_sha256": checksum, "schema": 2, "app_name": "IDFrame"}
+    expected = {"icon_sha256": checksum, "schema": 3, "app_name": "IDFrame"}
     if shortcut_paths is None and state.exists():
         try:
             if json.loads(state.read_text()) == expected:
