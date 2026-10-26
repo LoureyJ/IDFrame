@@ -55,11 +55,15 @@ class RemovalModeTests(unittest.TestCase):
                     root.update()
                     time.sleep(0.01)
                 self.assertFalse(app.busy)
-                self.assertEqual(str(app.mode_selector["state"]), "readonly")
+                self.assertTrue(
+                    all(str(button["state"]) == "normal" for button in app.mode_buttons)
+                )
 
             self.assertEqual(app.removal_mode.get(), "Protect person")
             app.remove()
-            self.assertEqual(str(app.mode_selector["state"]), "disabled")
+            self.assertTrue(
+                all(str(button["state"]) == "disabled" for button in app.mode_buttons)
+            )
             finish()
             self.assertEqual(app.crop.export().getpixel((600, 600)), (255, 0, 0))
             app.crop.zoom.set(2)

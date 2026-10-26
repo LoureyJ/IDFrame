@@ -36,6 +36,14 @@ cutout; the original photo is preserved. Opening a new photo resets brightness.
 
 ## Client installers and LAN updates
 
+The modern workspace provides side-by-side photo previews and a right editing
+panel with visible Auto, Protect person, and Fine hair radio choices. Light and
+Dark appearance share the same layout, soft rounded controls, and editing tools.
+The appearance switch applies immediately and is remembered per Windows user in
+`%LOCALAPPDATA%\IDFrame\preferences.json`, outside the OTA payload. It does not
+reset edits or change the white background in saved photos. In smaller windows,
+the editing panel scrolls while Save and the status footer remain accessible.
+
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the Windows installer, desktop shortcut,
 host server, and automatic file-level LAN updates. Clients do not need Python.
 On the host, use `build_installer.bat`, `start_host.bat`, and `update.bat`.

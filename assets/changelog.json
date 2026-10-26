@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.15",
+    "changes": [
+      "Introduced the combined modern workspace with side-by-side Original and 2×2 Preview cards, a right editing panel, rounded buttons and cards, and three visible removal-mode radio choices.",
+      "Added instant Light and Dark appearance switching with a remembered per-user preference. Changing appearance preserves the current photo, crop, brightness, and processing state; exported backgrounds remain white.",
+      "Styled the offline changelog and person-name prompt in both themes. Smaller windows retain the save action and status while editing controls scroll when needed."
+    ]
+  },
+  {
     "version": "1.1.14",
     "changes": [
       "Added a live Brightness slider before saving: below 100% darkens the portrait and above 100% lightens it. The saved photo uses the selected brightness while its background stays white.",

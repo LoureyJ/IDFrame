@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
+from ui_theme import palette_for, style_plain_widgets
 
 
 def show_changelog(parent, installed_version, existing=None):
@@ -110,5 +111,6 @@ def show_changelog(parent, installed_version, existing=None):
         ),
     )
     window.geometry(f"{width}x{height}+{x}+{y}")
+    style_plain_widgets(window, palette_for(parent))
     window.deiconify()
     return window

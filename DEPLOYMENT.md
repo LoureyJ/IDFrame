@@ -81,7 +81,8 @@ Windows installers for your organization requires your own code-signing certific
 The application title and heading display the installed client version. The generated
 `app_version.py` file is updated and delivered with each release. For local code changes,
 `build_release.py --prepare-only` reserves the new version without building an installer
-or touching the live OTA manifest. Current source prepares v1.1.14 with brightness adjustment,
+or touching the live OTA manifest. Current source prepares v1.1.15 with the modern
+rounded Light/Dark workspace, visible removal-mode radio choices, brightness adjustment,
 Explorer shortcut refresh, person-based automatic filenames, automatic host IP synchronization,
 automatic selection between Protect person / Fine hair modes, zoomable 2 × 2 crop framing, the versioned changelog, camo/low-quality
 adapted matting model, centered update dialog, and the 2 × 2 inch,

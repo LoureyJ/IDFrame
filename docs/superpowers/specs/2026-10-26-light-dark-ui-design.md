@@ -48,9 +48,12 @@ editing-workspace redesign.
 
 Retain the existing Python/Tkinter stack and current packaged dependencies.
 Build the visual refresh using reusable palette and widget styles, with small
-helpers for ordinary Tk widgets such as the preview labels and canvas. Exact
-rounded-corner rendering in the generated concepts is visual guidance, not a
-requirement to introduce another GUI framework.
+helpers for ordinary Tk widgets such as the preview labels and canvas. The user
+clarified that the generated images are the visual target: removal mode must use
+three visible radio options, and buttons and cards must have soft rounded corners.
+Use smooth circular slider handles and a Light/Dark appearance switch. Do not
+substitute square native controls or hide removal modes in a dropdown. Retain the
+existing packaged libraries while drawing these control surfaces.
 
 Keep all existing image processing, manual background-removal action, automatic
 mode selection, clipboard input, zoom, drag positioning, brightness, safe naming,
@@ -71,5 +74,6 @@ UI/export regressions and exercise both themes in the existing frozen runtime.
 
 ## Approval status
 
-Awaiting approval of this combined layout and the proposed theme defaults before
-implementation.
+Approved by the user. During implementation the user further confirmed that the
+generated visual concepts, including visible radio options and rounded controls,
+must guide the rendered result.

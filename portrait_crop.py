@@ -6,12 +6,13 @@ from tkinter import ttk
 from PIL import ImageTk
 
 from portrait import MAX_BRIGHTNESS, MIN_BRIGHTNESS, frame_portrait
+from ui_theme import palette_for
 
 
 class CropPreview(ttk.Frame):
     """Keep zoom and position in frame-relative coordinates for preview and export."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, controls_parent=None):
         """Create the crop canvas, zoom controls, and pointer event bindings."""
         super().__init__(parent)
         self.cutout = None
@@ -32,7 +33,11 @@ class CropPreview(ttk.Frame):
             cursor="fleur",
         )
         self.canvas.pack(fill="both", expand=True)
-        controls = ttk.Frame(self)
+        controls_host = controls_parent if controls_parent is not None else self
+        ttk.Label(controls_host, text="Framing", style="Section.TLabel").pack(
+            anchor="w"
+        )
+        controls = ttk.Frame(controls_host)
         controls.pack(fill="x", pady=(8, 0))
         ttk.Label(controls, text="Zoom").pack(side="left")
         self.slider = ttk.Scale(
@@ -45,11 +50,10 @@ class CropPreview(ttk.Frame):
         )
         self.slider.pack(side="left", fill="x", expand=True, padx=8)
         ttk.Label(controls, textvariable=self.zoom_text, width=5).pack(side="left")
-        self.reset_button = ttk.Button(
-            controls, text="Reset", command=self.reset, state="disabled"
+        ttk.Label(controls_host, text="Lighting", style="Section.TLabel").pack(
+            anchor="w", pady=(10, 0)
         )
-        self.reset_button.pack(side="right")
-        brightness_controls = ttk.Frame(self)
+        brightness_controls = ttk.Frame(controls_host)
         brightness_controls.pack(fill="x", pady=(8, 0))
         ttk.Label(brightness_controls, text="Brightness").pack(side="left")
         self.brightness_slider = ttk.Scale(
@@ -64,11 +68,19 @@ class CropPreview(ttk.Frame):
         ttk.Label(brightness_controls, textvariable=self.brightness_text, width=5).pack(
             side="right"
         )
+        self.reset_button = ttk.Button(
+            controls_host,
+            text="Reset Adjustments",
+            command=self.reset,
+            state="disabled",
+        )
+        self.reset_button.pack(fill="x", pady=(8, 0))
         ttk.Label(
-            self,
-            text="Drag to position. Brightness: below 100% darker, above 100% lighter.",
+            controls_host,
+            text="Drag the preview to position.\nBrightness: 100% is neutral.",
             font=("Segoe UI", 9),
-            wraplength=400,
+            wraplength=225 if controls_parent is not None else 400,
+            style="Muted.TLabel",
         ).pack(anchor="w", pady=(4, 0))
         self.canvas.bind("<Configure>", self.changed)
         self.canvas.bind("<ButtonPress-1>", self.start_drag)
@@ -114,6 +126,7 @@ class CropPreview(ttk.Frame):
     def draw(self):
         """Render the square preview at canvas size using the export framing geometry."""
         self.pending = None
+        colors = palette_for(self)
         width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
         side = max(1, min(width, height) - 12)
         self.frame_side = side
@@ -123,7 +136,7 @@ class CropPreview(ttk.Frame):
                 width / 2,
                 height / 2,
                 text="Your 2 × 2 portrait will appear here",
-                fill="#77849a",
+                fill=colors["muted"],
                 width=max(1, width - 20),
                 font=("Segoe UI", 10),
             )
@@ -144,7 +157,7 @@ class CropPreview(ttk.Frame):
             (height - side) / 2,
             (width + side) / 2,
             (height + side) / 2,
-            outline="#77849a",
+            outline=colors["border"],
         )
 
     def start_drag(self, event):

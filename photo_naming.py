@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import tkinter as tk
 from tkinter import ttk
+from ui_theme import palette_for, style_plain_widgets
 
 
 def portrait_filename(person_name):
@@ -61,7 +62,7 @@ def ask_person_name(parent, initial=""):
     preview = tk.StringVar(window)
     ttk.Label(page, textvariable=preview, wraplength=420).pack(anchor="w", pady=(10, 0))
     error = tk.StringVar(window)
-    ttk.Label(page, textvariable=error, foreground="#b42318", wraplength=420).pack(
+    ttk.Label(page, textvariable=error, style="Error.TLabel", wraplength=420).pack(
         anchor="w", pady=(4, 12)
     )
     buttons = ttk.Frame(page)
@@ -117,6 +118,7 @@ def ask_person_name(parent, initial=""):
         ),
     )
     window.geometry(f"+{x}+{y}")
+    style_plain_widgets(window, palette_for(parent))
     window.deiconify()
     window.grab_set()
     entry.focus_set()

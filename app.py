@@ -20,16 +20,20 @@ from windows_branding import set_taskbar_identity, sync_installed_shortcuts
 from app_version import VERSION
 from changelog import show_changelog
 from portrait_crop import CropPreview
+from ui_theme import apply_theme, load_theme, save_theme
+from ui_inspector import InspectorBody
 from photo_naming import ask_person_name, portrait_filename, available_photo_path
 
 
 class PortraitApp:
     """Coordinate the desktop UI while keeping model work outside Tk callbacks."""
 
-    def __init__(self, root):
+    def __init__(self, root, *, preferences_path=None):
         """Initialize photo state, shared model instances, worker, and desktop interface."""
         set_taskbar_identity()
         self.root = root
+        self.preferences_path = preferences_path
+        self.theme = tk.StringVar(root, value=load_theme(preferences_path))
         self.photo = self.result = self.path = None
         self.person_name = ""
         self.pool = ThreadPoolExecutor(max_workers=1)
@@ -47,6 +51,7 @@ class PortraitApp:
         self._configure_window()
         self._build_interface()
         self._bind_events()
+        apply_theme(root, self.theme.get())
         assets = Path(__file__).resolve().parent / "assets"
         self.branding_future = self.pool.submit(sync_installed_shortcuts, assets)
 
@@ -63,121 +68,150 @@ class PortraitApp:
             icon_path = str(assets / "portrait-studio.ico")
             root.iconbitmap(default=icon_path)
             root.iconbitmap(icon_path)
-        root.geometry("960x700")
-        root.minsize(900, 620)
-        root.configure(bg="#f3f5f8")
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TFrame", background="#f3f5f8")
-        style.configure(
-            "TLabel", background="#f3f5f8", foreground="#17243b", font=("Segoe UI", 10)
-        )
-        style.configure("Title.TLabel", font=("Segoe UI", 24, "bold"))
-        style.configure("TButton", padding=(16, 11), font=("Segoe UI", 10))
-        style.configure("Accent.TButton", background="#235ce0", foreground="white")
+        root.geometry("1240x780")
+        root.minsize(980, 680)
 
     def _build_interface(self):
-        """Compose the header, photo actions, previews, and export status area."""
-        root = self.root
-        page = ttk.Frame(root, padding=30)
+        """Compose a shared light/dark workspace around two previews and an inspector."""
+        page = ttk.Frame(self.root, padding=20, style="App.TFrame")
         page.pack(fill="both", expand=True)
+        page.columnconfigure(0, weight=1)
+        page.rowconfigure(2, weight=1)
         self._build_header(page)
         self._build_toolbar(page)
         self._build_previews(page)
         self._build_export_controls(page)
 
     def _build_header(self, page):
-        """Show the visible client version and offline changelog action."""
-        header = ttk.Frame(page)
-        header.pack(fill="x")
-        ttk.Label(header, text=f"IDFrame  v{VERSION}", style="Title.TLabel").pack(
-            side="left"
+        """Show application branding, the installed version, and appearance controls."""
+        header = ttk.Frame(page, style="App.TFrame")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
+        self.brand_icon = self.window_icon.subsample(
+            max(1, (self.window_icon.width() + 31) // 32)
+        )
+        ttk.Label(header, image=self.brand_icon, style="App.TLabel").pack(
+            side="left", padx=(0, 10)
+        )
+        ttk.Label(header, text="IDFrame", style="Title.TLabel").pack(side="left")
+        ttk.Label(header, text=f"v{VERSION}", style="App.TLabel").pack(
+            side="left", padx=12
         )
         self.changelog_window = None
         self.changelog_button = ttk.Button(
             header, text="Changelog", command=self.open_changelog
         )
         self.changelog_button.pack(side="right")
-        description = "Remove portrait backgrounds. Keep every photo on your computer."
-        ttk.Label(page, text=description).pack(anchor="w", pady=(5, 20))
+        appearance = ttk.Frame(header, style="App.TFrame")
+        appearance.pack(side="right", padx=(8, 16))
+        for name in ("Light", "Dark"):
+            ttk.Radiobutton(
+                appearance,
+                text=name,
+                value=name,
+                variable=self.theme,
+                command=self.change_theme,
+                style="Theme.TRadiobutton",
+            ).pack(side="left", padx=2)
 
     def _build_toolbar(self, page):
-        """Create photo actions and the automatic/manual removal-mode selector."""
-        toolbar = ttk.Frame(page)
-        toolbar.pack(fill="x")
+        """Keep photo input actions easy to reach above the editing workspace."""
+        toolbar = ttk.Frame(page, style="App.TFrame")
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 16))
         self.open_button = ttk.Button(
-            toolbar, text="1  Open photo", command=self.open_photo
+            toolbar, text="Open Photo", command=self.open_photo
         )
         self.open_button.pack(side="left")
         self.paste_button = ttk.Button(
-            toolbar, text="Paste photo (Ctrl+V)", command=self.paste_photo
+            toolbar, text="Paste  ·  Ctrl+V", command=self.paste_photo
         )
-        self.paste_button.pack(side="left", padx=(10, 0))
-        self.remove_button = ttk.Button(
-            toolbar,
-            text="2  Remove background",
-            style="Accent.TButton",
-            command=self.remove,
-            state="disabled",
-        )
-        self.remove_button.pack(side="left", padx=10)
-        self.save_button = ttk.Button(
-            toolbar, text="3  Save PNG", command=self.save, state="disabled"
-        )
-        self.save_button.pack(side="left")
-        mode_bar = ttk.Frame(page)
-        mode_bar.pack(fill="x", pady=(10, 0))
-        ttk.Label(mode_bar, text="Removal mode").pack(side="left", padx=(0, 8))
-        self.mode_selector = ttk.Combobox(
-            mode_bar,
-            textvariable=self.removal_mode,
-            values=tuple(self.removers),
-            state="readonly",
-            width=17,
-        )
-        self.mode_selector.pack(side="left")
-        self.mode_selector.bind("<<ComboboxSelected>>", self.mode_changed)
+        self.paste_button.pack(side="left", padx=10)
         ttk.Label(
-            mode_bar,
-            text="Auto checks both results. Manual modes remain available.",
-            font=("Segoe UI", 9),
-        ).pack(side="left", padx=12)
+            toolbar, text="Your photos stay on this computer", style="App.TLabel"
+        ).pack(side="right")
 
     def _build_previews(self, page):
-        """Place the source photo beside the interactive square crop preview."""
-        previews = ttk.Frame(page)
-        previews.pack(fill="both", expand=True, pady=24)
-        previews.columnconfigure((0, 1), weight=1, uniform="preview")
-        previews.rowconfigure(1, weight=1)
-        ttk.Label(previews, text="ORIGINAL").grid(
-            row=0, column=0, sticky="w", pady=(0, 8)
-        )
-        ttk.Label(previews, text="2 × 2 CROP · WHITE BACKGROUND").grid(
-            row=0, column=1, sticky="w", padx=(16, 0), pady=(0, 8)
+        """Place source and output cards beside a separate panel of editing controls."""
+        workspace = ttk.Frame(page, style="App.TFrame")
+        workspace.grid(row=2, column=0, sticky="nsew")
+        workspace.columnconfigure(0, weight=1, uniform="photos")
+        workspace.columnconfigure(1, weight=1, uniform="photos")
+        workspace.columnconfigure(2, minsize=300)
+        workspace.rowconfigure(0, weight=1)
+        self.original_card = ttk.Frame(workspace, padding=12, style="Card.TFrame")
+        self.original_card.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        ttk.Label(self.original_card, text="Original", style="Section.TLabel").pack(
+            anchor="w", pady=(0, 12)
         )
         self.before = tk.Label(
-            previews,
+            self.original_card,
             text="Open or paste a portrait photo",
-            bg="white",
-            fg="#77849a",
-            font=("Segoe UI", 11),
+            font=("Segoe UI", 10),
         )
-        self.crop = CropPreview(previews)
-        self.before.grid(row=1, column=0, sticky="nsew")
-        self.crop.grid(row=1, column=1, sticky="nsew", padx=(16, 0))
+        self.before.pack(fill="both", expand=True)
+        self.before.bind("<Configure>", self._resize_original)
+        self.preview_card = ttk.Frame(workspace, padding=12, style="Card.TFrame")
+        self.preview_card.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
+        ttk.Label(self.preview_card, text="2 × 2 Preview", style="Section.TLabel").pack(
+            anchor="w", pady=(0, 12)
+        )
+        self.inspector = ttk.Frame(workspace, padding=14, style="Card.TFrame")
+        self.inspector.grid(row=0, column=2, sticky="nsew")
+        self.inspector.columnconfigure(0, weight=1)
+        self.inspector.rowconfigure(0, weight=1)
+        self.inspector_body = InspectorBody(self.inspector)
+        self.inspector_body.grid(row=0, column=0, sticky="nsew")
+        body = self.inspector_body.body
+        modes = ttk.Frame(body)
+        modes.pack(fill="x")
+        ttk.Label(modes, text="Removal mode", style="Section.TLabel").pack(
+            anchor="w", pady=(0, 8)
+        )
+        self.mode_buttons = []
+        descriptions = {
+            "Auto": "Compare both local models",
+            "Protect person": "Keep more of the subject",
+            "Fine hair": "Detailed curls and wispy hair",
+        }
+        for name in self.removers:
+            button = ttk.Radiobutton(
+                modes,
+                text=name + "\n" + descriptions[name],
+                value=name,
+                variable=self.removal_mode,
+                command=self.mode_changed,
+                style="Mode.TRadiobutton",
+            )
+            button.pack(fill="x", pady=(0, 4))
+            self.mode_buttons.append(button)
+        self.remove_button = ttk.Button(
+            modes, text="Remove Background", command=self.remove, state="disabled"
+        )
+        self.remove_button.pack(fill="x", pady=(6, 8))
+        ttk.Separator(body).pack(fill="x", pady=(0, 10))
+        adjustments = ttk.Frame(body)
+        adjustments.pack(fill="x")
+        self.crop = CropPreview(self.preview_card, controls_parent=adjustments)
+        self.crop.pack(fill="both", expand=True)
+        self.save_button = ttk.Button(
+            self.inspector,
+            text="Save 2×2 Photo",
+            style="Accent.TButton",
+            command=self.save,
+            state="disabled",
+        )
+        self.save_button.grid(row=1, column=0, sticky="ew", pady=(12, 0))
 
     def _build_export_controls(self, page):
-        """Show the fixed print dimensions, processing progress, and current status."""
+        """Keep print dimensions, progress, and current status visible below the cards."""
+        footer = ttk.Frame(page, style="App.TFrame")
+        footer.grid(row=3, column=0, sticky="ew", pady=(14, 0))
         ttk.Label(
-            page,
-            text="EXPORT   2 × 2 inches · 1200 × 1200 pixels · 600 DPI · White PNG",
+            footer,
+            text="2 × 2 inches  ·  1200 × 1200 pixels  ·  600 DPI  ·  White PNG",
+            style="App.TLabel",
         ).pack(anchor="w")
-        ttk.Label(
-            page,
-            text="Zoom and drag the finished photo to frame your portrait. Original files are preserved.",
-        ).pack(anchor="w", pady=(5, 14))
-        self.progress = ttk.Progressbar(page, mode="indeterminate")
-        self.progress.pack(fill="x")
+        self.progress = ttk.Progressbar(footer, mode="indeterminate")
+        self.progress.pack(fill="x", pady=(8, 6))
         self.status = tk.StringVar(
             value=(
                 "Ready — offline processing"
@@ -187,9 +221,21 @@ class PortraitApp:
         )
         if MODEL_PATH.exists() and os.environ.get("PORTRAIT_UPDATE_STATUS"):
             self.status.set(os.environ["PORTRAIT_UPDATE_STATUS"] + " · ready")
-        ttk.Label(page, textvariable=self.status, wraplength=820).pack(
-            anchor="w", pady=(10, 0)
+        self.status_label = ttk.Label(
+            footer, textvariable=self.status, style="App.TLabel", wraplength=920
         )
+        self.status_label.pack(anchor="w")
+
+    def change_theme(self, event=None):
+        """Recolor the current workspace immediately and remember the user's choice."""
+        apply_theme(self.root, self.theme.get())
+        save_theme(self.theme.get(), self.preferences_path)
+        self.crop.changed()
+
+    def _resize_original(self, event=None):
+        """Refit the source photo when its card changes size without changing the source."""
+        if self.photo is not None:
+            self.show_image(self.before, self.photo)
 
     def _bind_events(self):
         """Connect window close and clipboard keyboard shortcuts to their handlers."""
@@ -219,7 +265,14 @@ class PortraitApp:
 
     def show_image(self, label, image):
         """Fit a photo into its preview label and retain the Tk image reference."""
-        preview = ImageOps.contain(image, (330, 330))
+        width = label.winfo_width()
+        height = label.winfo_height()
+        bounds = (
+            (max(1, width - 16), max(1, height - 16))
+            if width > 1 and height > 1
+            else (330, 330)
+        )
+        preview = ImageOps.contain(image, bounds)
         display = ImageTk.PhotoImage(preview)
         label.configure(image=display, text="")
         label.image = display
@@ -273,7 +326,8 @@ class PortraitApp:
         """Disable photo actions and submit local background removal to the worker."""
         self.busy = True
         self.active_mode = self.removal_mode.get()
-        self.mode_selector.configure(state="disabled")
+        for button in self.mode_buttons:
+            button.configure(state="disabled")
         self.open_button.configure(state="disabled")
         self.paste_button.configure(state="disabled")
         self.remove_button.configure(state="disabled")
@@ -301,7 +355,8 @@ class PortraitApp:
             return
         self.progress.stop()
         self.busy = False
-        self.mode_selector.configure(state="readonly")
+        for button in self.mode_buttons:
+            button.configure(state="normal")
         self.open_button.configure(state="normal")
         self.paste_button.configure(state="normal")
         self.remove_button.configure(state="normal")
