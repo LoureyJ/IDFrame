@@ -43,21 +43,6 @@ Drag to erase unwanted residue, adjust the eraser diameter, and use Undo/Redo
 (Ctrl+Z / Ctrl+Y). Wheel to zoom; middle-drag or Space-drag to pan. **Apply** keeps
 the corrected mask and current crop/brightness; **Cancel** discards this editing
 session. Reset Adjustments resets framing and lighting, not applied erasures.
-
-To test the locally trained P3M candidate on the source host, start `launch.bat`,
-open/paste a photo and remove its background normally. Choose **Test P3M** in the
-right panel to compare the current result with the experimental result using
-identical crop and brightness. **Keep current**, Escape or closing the comparison
-discards the candidate. **Use P3M for this photo** applies it to this photo only;
-you can then Edit or Save normally. Auto/Protect person/Fine hair defaults do not
-change. Applying P3M replaces the current cutout, including any manual erasures;
-the comparison's left side shows the current edited result before that choice.
-
-This test button appears only where
-`build/p3m-review/full/candidate.onnx` exists. The experimental weights stay local
-under ignored `build/`; they are not copied into client updates or installers.
-An installed desktop shortcut without that local candidate does not show the
-button. Use the source project's `launch.bat` for this host-only test.
 Opening another photo or rerunning removal creates a fresh result. Source files
 remain untouched, and no client photos are collected or uploaded.
 
