@@ -1,5 +1,47 @@
 # Local portrait adaptation
 
+## Public P3M-10k supervised training
+
+The newly authorized run uses public RGB/continuous-alpha pairs, not client photos.
+Data is stored under ignored `build/datasets/p3m10k/`; candidate weights and reports
+under ignored `build/p3m-review/`. The official Drive archive was quota-limited, so
+the acquired copy is the `nobg/P3M-10K` mirror at revision
+`a239de9297bd56e372cf3c9c82f7085d59e71219`. `provenance.json` records all 13 shard
+sizes and SHA-256 values. Each shard was hash-verified. `audit.json` records 9,421
+training-split pairs, two independent 500-image official test splits, and no
+byte-identical image duplicates across these files. The original release agreement
+is retained alongside the local dataset.
+
+`p3m_dataset.py` loads one Parquet row group at a time and retains continuous alpha.
+Paired resize/flip geometry is shared between RGB and matte; optional blur, lighting
+and JPEG degradation affect RGB only. `train_p3m.py` uses supervised semantic,
+boundary-detail, matte and composition losses with frozen normalization layers.
+Four hundred fixed training-split rows are withheld for model selection, leaving
+9,021 optimizer steps per full epoch. Official test rows never enter training.
+The initial run is one epoch at 384px maximum side, Adam learning rate 0.00001,
+seed 42, and two CPU threads. A separate 20-step smoke run verified finite training
+and measured approximately one second per step before competing build work.
+
+```powershell
+.training-venv\Scripts\python -m unittest discover -s training -p test_p3m.py
+.training-venv\Scripts\python training/train_p3m.py --output build/p3m-review/full --epochs 1 --threads 2
+# Resume the exact same run after interruption:
+.training-venv\Scripts\python training/train_p3m.py --output build/p3m-review/full --epochs 1 --threads 2 --resume
+.training-venv\Scripts\python training/evaluate_p3m.py --model models/portrait_hair.onnx --output build/p3m-review/evaluation-current
+```
+
+`resume.pt` contains model/optimizer state, epoch position, torch RNG and run
+metadata and is saved every 250 steps. Training exports only a candidate; it never
+replaces `models/portrait_hair.onnx`. Check `report.json` for actual completion and
+coverage. No model improvement is claimed until held-out evaluation, current-model
+comparison, ONNX parity and visual review pass. Evaluation records actual client
+preprocessing, equal-weight per-image errors at a maximum metric side of 768, and a
+custom boundary band; these are not official leaderboard scores.
+
+Public dataset: https://github.com/JizhiziLi/P3M
+Agreement: https://jizhizili.github.io/files/p3m_dataset_agreement/P3M-10k_Dataset_Release_Agreement.pdf
+Training and evaluation require host-only PyTorch, PyArrow and ONNX Runtime.
+
 ## Camo and low-quality challenge set
 
 The second training round includes six images under `training photos/camo/`, six
