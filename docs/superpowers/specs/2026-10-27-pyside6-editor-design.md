@@ -1,6 +1,6 @@
 # IDFrame PySide6 migration and portrait cleanup editor
 
-Status: proposed for user approval. No application migration implemented yet.
+Status: approved by the user on 2026-10-27; Native implementation is underway.
 
 ## Intent and agreed scope
 

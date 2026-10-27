@@ -31,14 +31,13 @@ class MaskDocument:
     def history_bytes(self):
         """Count retained before/after alpha bytes across both history directions."""
         return sum(
-            before.width * before.height * 2
-            for _, before, _ in self._undo + self._redo
+            before.width * before.height * 2 for _, before, _ in self._undo + self._redo
         )
 
-    def image(self):
-        """Return an independent full-resolution cutout with the current alpha."""
-        result = self._source.copy()
-        result.putalpha(self._alpha)
+    def image(self, bounds=None):
+        """Return independent cutout pixels, optionally restricted to a changed region."""
+        result = self._source.copy() if bounds is None else self._source.crop(bounds)
+        result.putalpha(self._alpha if bounds is None else self._alpha.crop(bounds))
         return result
 
     def begin_stroke(self):
@@ -73,10 +72,9 @@ class MaskDocument:
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
         # Area averaging smooths edges without Lanczos ringing inside the brush.
         brush = brush.resize((right - left, bottom - top), Image.Resampling.BOX)
-        patch = ImageChops.multiply(
-            self._alpha.crop(bounds), ImageChops.invert(brush)
-        )
+        patch = ImageChops.multiply(self._alpha.crop(bounds), ImageChops.invert(brush))
         self._alpha.paste(patch, (left, top))
+        return bounds
 
     def end_stroke(self):
         """Retain only the changed rectangle and evict oldest steps over the budget."""
@@ -99,6 +97,7 @@ class MaskDocument:
             entry = self._undo.pop()
             self._alpha.paste(entry[1], entry[0][:2])
             self._redo.append(entry)
+            return entry[0]
 
     def redo(self):
         """Reapply exact post-stroke alpha from the most recent undone operation."""
@@ -107,3 +106,4 @@ class MaskDocument:
             entry = self._redo.pop()
             self._alpha.paste(entry[2], entry[0][:2])
             self._undo.append(entry)
+            return entry[0]

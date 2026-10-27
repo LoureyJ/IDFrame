@@ -23,7 +23,27 @@ CLIENT = ROOT / "dist" / "client"
 
 def run(args):
     """Run a build command from the project directory and stop on failure."""
-    subprocess.run([str(a) for a in args], cwd=ROOT, check=True)
+    environment = runtime_build_environment() if "PyInstaller" in args else None
+    subprocess.run([str(a) for a in args], cwd=ROOT, env=environment, check=True)
+
+
+def runtime_build_environment():
+    """Prevent unrelated PATH/Qt/Python libraries from contaminating frozen binaries."""
+    environment = os.environ.copy()
+    windows = Path(environment.get("SystemRoot", r"C:\Windows"))
+    environment["PATH"] = os.pathsep.join(
+        str(path)
+        for path in (
+            Path(sys.executable).parent,
+            Path(sys.base_prefix),
+            Path(sys.base_prefix) / "DLLs",
+            windows / "System32",
+            windows,
+        )
+    )
+    for name in ("QT_PLUGIN_PATH", "QML2_IMPORT_PATH", "PYTHONPATH", "PYTHONHOME"):
+        environment.pop(name, None)
+    return environment
 
 
 def remove_build_dir(path):
@@ -61,6 +81,7 @@ def build_runtime(force=False):
     """Reuse or rebuild the frozen CPU runtime when its inputs change."""
     fingerprint = canonical(
         {
+            "builder": digest(ROOT / "build_release.py"),
             "runtime": digest(ROOT / "deployment" / "runtime.py"),
             "icon": digest(ROOT / "assets" / "portrait-studio.ico"),
             "packages": sorted(
@@ -84,6 +105,7 @@ def build_runtime(force=False):
                 "-m",
                 "PyInstaller",
                 "--noconfirm",
+                "--clean",
                 "--onedir",
                 "--windowed",
                 "--noupx",
@@ -111,6 +133,12 @@ def build_runtime(force=False):
                 "tkinter.messagebox",
                 "--hidden-import",
                 "tkinter.ttk",
+                "--hidden-import",
+                "PySide6.QtCore",
+                "--hidden-import",
+                "PySide6.QtGui",
+                "--hidden-import",
+                "PySide6.QtWidgets",
                 "--collect-binaries",
                 "onnxruntime",
                 ROOT / "deployment" / "runtime.py",
@@ -153,6 +181,7 @@ def build_launcher():
                 "-m",
                 "PyInstaller",
                 "--noconfirm",
+                "--clean",
                 "--onefile",
                 "--windowed",
                 "--noupx",

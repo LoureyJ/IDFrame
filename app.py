@@ -1,435 +1,528 @@
-"""Desktop background remover. All photo processing runs on this computer."""
+"""Qt portrait studio with offline inference and cached, responsive image previews."""
 
-from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+import sys
 
-from PIL import ImageOps, ImageTk
+from PIL import Image
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon, QFont, QShortcut, QKeySequence
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QButtonGroup,
+    QRadioButton,
+    QScrollArea,
+    QSlider,
+    QProgressBar,
+    QFileDialog,
+    QMessageBox,
+)
+
+from app_version import VERSION
 from portrait import (
-    MODEL_PATH,
     PortraitRemover,
     AutomaticPortraitRemover,
-    format_portrait,
     load_photo,
+    frame_portrait,
     save_portrait,
 )
-from photo_clipboard import load_clipboard_photo
+from photo_naming import portrait_filename, available_photo_path
 from windows_branding import set_taskbar_identity, sync_installed_shortcuts
-from app_version import VERSION
-from changelog import show_changelog
-from portrait_crop import CropPreview
-from ui_theme import apply_theme, load_theme, save_theme
-from ui_inspector import InspectorBody
-from photo_naming import ask_person_name, portrait_filename, available_photo_path
+from qt_jobs import JobPool
+from qt_preview import PhotoPreview, qt_to_image
+from qt_theme import apply_theme, load_theme, save_theme
+from qt_dialogs import ask_person_name, changelog_dialog
+
+ROOT = Path(__file__).resolve().parent
 
 
-class PortraitApp:
-    """Coordinate the desktop UI while keeping model work outside Tk callbacks."""
+class PortraitApp(QMainWindow):
+    """Coordinate Qt controls while workers handle image preparation and inference."""
 
-    def __init__(self, root, *, preferences_path=None):
-        """Initialize photo state, shared model instances, worker, and desktop interface."""
+    def __init__(self, *, preferences_path=None, sync_shortcuts=True):
+        """Create the document, shared models, job pool, and branded desktop workspace."""
+        super().__init__()
         set_taskbar_identity()
-        self.root = root
         self.preferences_path = preferences_path
-        self.theme = tk.StringVar(root, value=load_theme(preferences_path))
+        self.theme = load_theme(preferences_path)
         self.photo = self.result = self.path = None
         self.person_name = ""
-        self.pool = ThreadPoolExecutor(max_workers=1)
+        self.busy, self.generation = False, 0
+        self._close_timer_pending = False
+        self.editor = self.changelog_window = None
+        self.jobs = JobPool(self)
         self.remover = PortraitRemover()
-        fine_hair = PortraitRemover(mode="fine_hair")
+        hair = PortraitRemover(mode="fine_hair")
         self.removers = {
-            "Auto": AutomaticPortraitRemover(self.remover, fine_hair),
+            "Auto": AutomaticPortraitRemover(self.remover, hair),
             "Protect person": self.remover,
-            "Fine hair": fine_hair,
+            "Fine hair": hair,
         }
-        self.removal_mode = tk.StringVar(root, value="Auto")
-        self.active_mode = None
-        self.future = None
-        self.busy = False
-        self._configure_window()
+        self.removal_mode, self.active_mode = "Auto", None
+        self.setWindowTitle(f"IDFrame v{VERSION} — Offline Background Remover")
+        self.setWindowIcon(QIcon(str(ROOT / "assets/portrait-studio.ico")))
+        available = QApplication.primaryScreen().availableGeometry()
+        width, height = available.width() - 16, available.height() - 40
+        self.setMinimumSize(min(860, width), min(560, height))
+        self.resize(min(1240, width), min(780, height))
         self._build_interface()
-        self._bind_events()
-        apply_theme(root, self.theme.get())
-        assets = Path(__file__).resolve().parent / "assets"
-        self.branding_future = self.pool.submit(sync_installed_shortcuts, assets)
+        apply_theme(self.theme)
+        self.theme_buttons[self.theme].setChecked(True)
+        self.paste_shortcut = QShortcut(QKeySequence.StandardKey.Paste, self)
+        self.paste_shortcut.activated.connect(self.paste_photo)
+        self._set_busy(False)
+        if sync_shortcuts:
+            self.jobs.submit(
+                lambda: sync_installed_shortcuts(ROOT / "assets"), self._branding_done
+            )
 
-    def _configure_window(self):
-        """Apply the window title, icons, dimensions, and shared widget styles."""
-        root = self.root
-        root.title(f"IDFrame v{VERSION} — Offline Background Remover")
-        assets = Path(__file__).resolve().parent / "assets"
-        self.window_icon = tk.PhotoImage(
-            master=root, file=str(assets / "portrait-studio.png")
-        )
-        root.iconphoto(True, self.window_icon)
-        if os.name == "nt":
-            icon_path = str(assets / "portrait-studio.ico")
-            root.iconbitmap(default=icon_path)
-            root.iconbitmap(icon_path)
-        root.geometry("1240x780")
-        root.minsize(980, 680)
+    def _branding_done(self, value, error):
+        """Report shortcut refresh errors without interrupting the photo workflow."""
+        if error is not None:
+            import logging
+
+            logging.getLogger(__name__).warning("Shortcut refresh failed: %s", error)
 
     def _build_interface(self):
-        """Compose a shared light/dark workspace around two previews and an inspector."""
-        page = ttk.Frame(self.root, padding=20, style="App.TFrame")
-        page.pack(fill="both", expand=True)
-        page.columnconfigure(0, weight=1)
-        page.rowconfigure(2, weight=1)
-        self._build_header(page)
-        self._build_toolbar(page)
-        self._build_previews(page)
-        self._build_export_controls(page)
-
-    def _build_header(self, page):
-        """Show application branding, the installed version, and appearance controls."""
-        header = ttk.Frame(page, style="App.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        self.brand_icon = self.window_icon.subsample(
-            max(1, (self.window_icon.width() + 31) // 32)
-        )
-        ttk.Label(header, image=self.brand_icon, style="App.TLabel").pack(
-            side="left", padx=(0, 10)
-        )
-        ttk.Label(header, text="IDFrame", style="Title.TLabel").pack(side="left")
-        ttk.Label(header, text=f"v{VERSION}", style="App.TLabel").pack(
-            side="left", padx=12
-        )
-        self.changelog_window = None
-        self.changelog_button = ttk.Button(
-            header, text="Changelog", command=self.open_changelog
-        )
-        self.changelog_button.pack(side="right")
-        appearance = ttk.Frame(header, style="App.TFrame")
-        appearance.pack(side="right", padx=(8, 16))
+        """Build rounded photo cards and a scrollable inspector with Save kept visible."""
+        central = QWidget()
+        page = QVBoxLayout(central)
+        compact = self.width() < 860
+        margin = 12 if compact else 20
+        page.setContentsMargins(margin, 18, margin, 14)
+        page.setSpacing(14)
+        self.setCentralWidget(central)
+        header = QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(self.windowIcon().pixmap(34, 34))
+        title = QLabel("IDFrame")
+        title.setFont(QFont("Segoe UI", 23, QFont.Weight.Bold))
+        for widget in (icon, title, QLabel("v" + VERSION)):
+            header.addWidget(widget)
+        header.addStretch()
+        self.theme_buttons = {}
+        self.theme_group = QButtonGroup(self)
         for name in ("Light", "Dark"):
-            ttk.Radiobutton(
-                appearance,
-                text=name,
-                value=name,
-                variable=self.theme,
-                command=self.change_theme,
-                style="Theme.TRadiobutton",
-            ).pack(side="left", padx=2)
-
-    def _build_toolbar(self, page):
-        """Keep photo input actions easy to reach above the editing workspace."""
-        toolbar = ttk.Frame(page, style="App.TFrame")
-        toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 16))
-        self.open_button = ttk.Button(
-            toolbar, text="Open Photo", command=self.open_photo
-        )
-        self.open_button.pack(side="left")
-        self.paste_button = ttk.Button(
-            toolbar, text="Paste  ·  Ctrl+V", command=self.paste_photo
-        )
-        self.paste_button.pack(side="left", padx=10)
-        ttk.Label(
-            toolbar, text="Your photos stay on this computer", style="App.TLabel"
-        ).pack(side="right")
-
-    def _build_previews(self, page):
-        """Place source and output cards beside a separate panel of editing controls."""
-        workspace = ttk.Frame(page, style="App.TFrame")
-        workspace.grid(row=2, column=0, sticky="nsew")
-        workspace.columnconfigure(0, weight=1, uniform="photos")
-        workspace.columnconfigure(1, weight=1, uniform="photos")
-        workspace.columnconfigure(2, minsize=300)
-        workspace.rowconfigure(0, weight=1)
-        self.original_card = ttk.Frame(workspace, padding=12, style="Card.TFrame")
-        self.original_card.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        ttk.Label(self.original_card, text="Original", style="Section.TLabel").pack(
-            anchor="w", pady=(0, 12)
-        )
-        self.before = tk.Label(
-            self.original_card,
-            text="Open or paste a portrait photo",
-            font=("Segoe UI", 10),
-        )
-        self.before.pack(fill="both", expand=True)
-        self.before.bind("<Configure>", self._resize_original)
-        self.preview_card = ttk.Frame(workspace, padding=12, style="Card.TFrame")
-        self.preview_card.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
-        ttk.Label(self.preview_card, text="2 × 2 Preview", style="Section.TLabel").pack(
-            anchor="w", pady=(0, 12)
-        )
-        self.inspector = ttk.Frame(workspace, padding=14, style="Card.TFrame")
-        self.inspector.grid(row=0, column=2, sticky="nsew")
-        self.inspector.columnconfigure(0, weight=1)
-        self.inspector.rowconfigure(0, weight=1)
-        self.inspector_body = InspectorBody(self.inspector)
-        self.inspector_body.grid(row=0, column=0, sticky="nsew")
-        body = self.inspector_body.body
-        modes = ttk.Frame(body)
-        modes.pack(fill="x")
-        ttk.Label(modes, text="Removal mode", style="Section.TLabel").pack(
-            anchor="w", pady=(0, 8)
-        )
-        self.mode_buttons = []
-        descriptions = {
-            "Auto": "Compare both local models",
-            "Protect person": "Keep more of the subject",
-            "Fine hair": "Detailed curls and wispy hair",
-        }
-        for name in self.removers:
-            button = ttk.Radiobutton(
-                modes,
-                text=name + "\n" + descriptions[name],
-                value=name,
-                variable=self.removal_mode,
-                command=self.mode_changed,
-                style="Mode.TRadiobutton",
+            button = QPushButton(name)
+            button.setCheckable(True)
+            self.theme_group.addButton(button)
+            button.clicked.connect(
+                lambda checked=False, value=name: self.change_theme(value)
             )
-            button.pack(fill="x", pady=(0, 4))
-            self.mode_buttons.append(button)
-        self.remove_button = ttk.Button(
-            modes, text="Remove Background", command=self.remove, state="disabled"
+            self.theme_buttons[name] = button
+            header.addWidget(button)
+        changelog = QPushButton("Changelog")
+        changelog.clicked.connect(self.open_changelog)
+        header.addWidget(changelog)
+        page.addLayout(header)
+        toolbar = QHBoxLayout()
+        self.open_button = QPushButton("Open Photo")
+        self.open_button.clicked.connect(self.open_photo)
+        self.paste_button = QPushButton("Paste · Ctrl+V")
+        self.paste_button.clicked.connect(self.paste_photo)
+        self.edit_button = QPushButton("Edit")
+        self.edit_button.clicked.connect(self.open_editor)
+        for button in (self.open_button, self.paste_button, self.edit_button):
+            toolbar.addWidget(button)
+        toolbar.addStretch()
+        privacy = QLabel("Your photos stay on this computer")
+        privacy.setWordWrap(True)
+        toolbar.addWidget(privacy)
+        page.addLayout(toolbar)
+        workspace = QHBoxLayout()
+        workspace.setSpacing(12)
+        self.before, self.crop = PhotoPreview(self.jobs, framing=False), PhotoPreview(
+            self.jobs
         )
-        self.remove_button.pack(fill="x", pady=(6, 8))
-        ttk.Separator(body).pack(fill="x", pady=(0, 10))
-        adjustments = ttk.Frame(body)
-        adjustments.pack(fill="x")
-        self.crop = CropPreview(self.preview_card, controls_parent=adjustments)
-        self.crop.pack(fill="both", expand=True)
-        self.save_button = ttk.Button(
-            self.inspector,
-            text="Save 2×2 Photo",
-            style="Accent.TButton",
-            command=self.save,
-            state="disabled",
-        )
-        self.save_button.grid(row=1, column=0, sticky="ew", pady=(12, 0))
-
-    def _build_export_controls(self, page):
-        """Keep print dimensions, progress, and current status visible below the cards."""
-        footer = ttk.Frame(page, style="App.TFrame")
-        footer.grid(row=3, column=0, sticky="ew", pady=(14, 0))
-        ttk.Label(
-            footer,
-            text="2 × 2 inches  ·  1200 × 1200 pixels  ·  600 DPI  ·  White PNG",
-            style="App.TLabel",
-        ).pack(anchor="w")
-        self.progress = ttk.Progressbar(footer, mode="indeterminate")
-        self.progress.pack(fill="x", pady=(8, 6))
-        self.status = tk.StringVar(
-            value=(
-                "Ready — offline processing"
-                if MODEL_PATH.exists()
-                else "Model missing — run setup.bat once before processing."
-            )
-        )
-        if MODEL_PATH.exists() and os.environ.get("PORTRAIT_UPDATE_STATUS"):
-            self.status.set(os.environ["PORTRAIT_UPDATE_STATUS"] + " · ready")
-        self.status_label = ttk.Label(
-            footer, textvariable=self.status, style="App.TLabel", wraplength=920
-        )
-        self.status_label.pack(anchor="w")
-
-    def change_theme(self, event=None):
-        """Recolor the current workspace immediately and remember the user's choice."""
-        apply_theme(self.root, self.theme.get())
-        save_theme(self.theme.get(), self.preferences_path)
-        self.crop.changed()
-
-    def _resize_original(self, event=None):
-        """Refit the source photo when its card changes size without changing the source."""
-        if self.photo is not None:
-            self.show_image(self.before, self.photo)
-
-    def _bind_events(self):
-        """Connect window close and clipboard keyboard shortcuts to their handlers."""
-        root = self.root
-        root.protocol("WM_DELETE_WINDOW", self.close)
-        root.bind("<Control-v>", self.paste_photo)
-        root.bind("<Control-V>", self.paste_photo)
-
-    def open_changelog(self):
-        """Open or focus the offline release notes for the installed client version."""
-        self.changelog_window = show_changelog(
-            self.root, VERSION, self.changelog_window
-        )
-
-    def mode_changed(self, event=None):
-        """Reprocess the current result when an idle user selects another removal mode."""
-        if (
-            not self.is_processing()
-            and self.photo is not None
-            and self.result is not None
+        for text, preview in (("Original", self.before), ("2 × 2 Preview", self.crop)):
+            card, layout = self._card()
+            label = QLabel(text)
+            label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            layout.addWidget(label)
+            layout.addWidget(preview, 1)
+            workspace.addWidget(card, 1)
+        inspector, layout = self._card()
+        inspector.setFixedWidth(260 if compact else 280)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        controls = QVBoxLayout(body)
+        controls.setContentsMargins(0, 0, 5, 0)
+        controls.setSpacing(8)
+        controls.addWidget(QLabel("Removal mode"))
+        self.mode_group, self.mode_buttons = QButtonGroup(self), []
+        for name, description in zip(
+            self.removers,
+            (
+                "Compare both local models",
+                "Keep more of the subject",
+                "Detailed curls and wispy hair",
+            ),
         ):
-            self.remove()
-
-    def is_processing(self):
-        """Report whether a photo task or an unconsumed result still blocks input."""
-        return self.busy or (self.future is not None and not self.future.done())
-
-    def show_image(self, label, image):
-        """Fit a photo into its preview label and retain the Tk image reference."""
-        width = label.winfo_width()
-        height = label.winfo_height()
-        bounds = (
-            (max(1, width - 16), max(1, height - 16))
-            if width > 1 and height > 1
-            else (330, 330)
+            button = QRadioButton(name + "\n" + description)
+            button.toggled.connect(
+                lambda checked, value=name: (
+                    self.mode_changed(value) if checked else None
+                )
+            )
+            self.mode_group.addButton(button)
+            controls.addWidget(button)
+            self.mode_buttons.append(button)
+        self.mode_buttons[0].setChecked(True)
+        self.remove_button = QPushButton("Remove Background")
+        self.remove_button.clicked.connect(self.remove)
+        controls.addWidget(self.remove_button)
+        self.zoom_slider, self.zoom_label = self._slider(
+            controls, "Framing · Zoom", 100, 800
         )
-        preview = ImageOps.contain(image, bounds)
-        display = ImageTk.PhotoImage(preview)
-        label.configure(image=display, text="")
-        label.image = display
+        self.brightness_slider, self.brightness_label = self._slider(
+            controls, "Lighting · Brightness", 25, 200
+        )
+        self.zoom_slider.valueChanged.connect(
+            lambda value: self.crop.set_framing(zoom=value / 100)
+        )
+        self.brightness_slider.valueChanged.connect(
+            lambda value: self.crop.set_framing(brightness=value / 100)
+        )
+        self.reset_button = QPushButton("Reset Adjustments")
+        self.reset_button.clicked.connect(self.crop.reset)
+        controls.addWidget(self.reset_button)
+        help_text = QLabel(
+            "Drag the preview to position.\nBrightness: 100% is neutral."
+        )
+        help_text.setWordWrap(True)
+        controls.addWidget(help_text)
+        controls.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        self.save_button = QPushButton("Save 2×2 Photo")
+        self.save_button.setProperty("accent", True)
+        self.save_button.clicked.connect(self.save)
+        layout.addWidget(self.save_button)
+        workspace.addWidget(inspector)
+        page.addLayout(workspace, 1)
+        page.addWidget(
+            QLabel("2 × 2 inches · 1200 × 1200 pixels · 600 DPI · White PNG")
+        )
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        page.addWidget(self.progress)
+        self.status_label = QLabel(
+            os.environ.get("PORTRAIT_UPDATE_STATUS", "Ready — offline processing")
+        )
+        self.status_label.setWordWrap(True)
+        page.addWidget(self.status_label)
+        self.crop.framing_changed.connect(self._sync_adjustments)
+
+    def _card(self):
+        """Create a themed card and its independently managed layout."""
+        frame = QFrame()
+        frame.setProperty("card", True)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 12, 12, 12)
+        return frame, layout
+
+    def _slider(self, layout, title, minimum, maximum):
+        """Create an accessible adjustment slider with a percentage readout."""
+        layout.addWidget(QLabel(title))
+        row = QHBoxLayout()
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(minimum, maximum)
+        slider.setValue(100)
+        slider.setAccessibleName(title)
+        label = QLabel("100%")
+        label.setMinimumWidth(42)
+        row.addWidget(slider, 1)
+        row.addWidget(label)
+        layout.addLayout(row)
+        return slider, label
+
+    def _sync_adjustments(self):
+        """Reflect pointer and reset changes without recursively emitting slider events."""
+        for slider, value, label in (
+            (self.zoom_slider, self.crop.zoom, self.zoom_label),
+            (self.brightness_slider, self.crop.brightness, self.brightness_label),
+        ):
+            slider.blockSignals(True)
+            slider.setValue(round(value * 100))
+            slider.blockSignals(False)
+            label.setText(f"{value:.0%}")
+
+    def change_theme(self, name):
+        """Change appearance without rebuilding the document or prepared image pixels."""
+        if name != self.theme:
+            self.theme = name
+            apply_theme(name)
+            self.theme_buttons[name].setChecked(True)
+            save_theme(name, self.preferences_path)
+
+    def _set_busy(self, busy):
+        """Keep controls consistent until a background result has been consumed."""
+        self.busy = busy
+        ready = self.crop.cutout is not None
+        for button in (self.open_button, self.paste_button, *self.mode_buttons):
+            button.setEnabled(not busy)
+        self.remove_button.setEnabled(not busy and self.photo is not None)
+        for control in (
+            self.edit_button,
+            self.save_button,
+            self.zoom_slider,
+            self.brightness_slider,
+            self.reset_button,
+            self.crop,
+        ):
+            control.setEnabled(not busy and ready)
+        self.progress.setRange(0, 0 if busy else 1)
+        self.progress.setValue(0)
+
+    def _work(self, work, accept, description):
+        """Run a document operation and reject callbacks for a replaced source."""
+        generation = self.generation
+        self._set_busy(True)
+        self.status_label.setText(description)
+
+        def completed(value, error):
+            """Recover controls and consume the current operation on the GUI thread."""
+            if generation != self.generation:
+                return
+            self._set_busy(False)
+            if error is not None:
+                self.status_label.setText("Operation failed — original photo preserved")
+                QMessageBox.warning(self, "IDFrame", str(error))
+            else:
+                accept(value)
+
+        self.jobs.submit(work, completed)
+
+    def set_photo(self, photo, path=None, description="Photo loaded"):
+        """Replace source data and invalidate all previous removal and editing state."""
+        self.generation += 1
+        self.photo, self.path, self.result = photo, path, None
+        self.person_name = ""
+        self.before.set_image(photo)
+        self.crop.set_image(None)
+        self.status_label.setText(description)
+        self._set_busy(False)
+
+    def set_cutout(self, cutout):
+        """Accept a new removal result with neutral crop and lighting adjustments."""
+        self.result = cutout
+        self.crop.set_image(cutout)
+        self._set_busy(False)
 
     def open_photo(self):
-        """Prompt for a source photo and load it without modifying the original file."""
-        if self.is_processing():
+        """Choose a source and load/orient its pixels outside the GUI thread."""
+        if self.busy:
             return
-        path = filedialog.askopenfilename(
-            filetypes=[
-                ("Photos", "*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff"),
-                ("All files", "*.*"),
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open portrait",
+            "",
+            "Photos (*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff);;All files (*)",
+        )
+        if path:
+            self._work(
+                lambda: load_photo(path),
+                lambda photo: self.set_photo(
+                    photo, Path(path), "Opened " + Path(path).name
+                ),
+                "Loading photo…",
+            )
+
+    def paste_photo(self):
+        """Load copied image pixels or the first readable local photo URL."""
+        if self.busy or QApplication.activeModalWidget() is not None:
+            return
+        clipboard = QApplication.clipboard()
+        mime = clipboard.mimeData()
+        if mime is not None and mime.hasImage():
+            snapshot = clipboard.image()
+            if not snapshot.isNull():
+
+                def convert_clipboard():
+                    """Convert an owned QImage snapshot away from GUI callbacks."""
+                    pixels = qt_to_image(snapshot)
+                    return Image.alpha_composite(
+                        Image.new("RGBA", pixels.size, "white"), pixels
+                    ).convert("RGB")
+
+                self._work(
+                    convert_clipboard,
+                    lambda photo: self.set_photo(
+                        photo, None, "Pasted photo from clipboard"
+                    ),
+                    "Loading clipboard photo…",
+                )
+                return
+        if mime is not None and mime.hasUrls():
+            paths = [
+                Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()
             ]
-        )
-        if not path:
-            return
-        try:
-            photo = load_photo(path)
-        except Exception as error:
-            messagebox.showerror("Cannot open photo", str(error))
-            return
-        self.set_photo(photo, Path(path), f"Opened {Path(path).name}")
 
-    def paste_photo(self, event=None):
-        """Load a copied image or photo file while respecting processing and dialog focus."""
-        if self.is_processing():
-            return "break"
-        # Do not intercept Ctrl+V in a file dialog or another child window.
-        if event is not None and event.widget.winfo_toplevel() != self.root:
+            def load_first():
+                """Skip non-images in a copied file list without altering current data."""
+                for path in paths:
+                    try:
+                        return load_photo(path), path
+                    except (OSError, ValueError):
+                        continue
+                raise ValueError("No supported photo in the clipboard")
+
+            self._work(
+                load_first,
+                lambda pair: self.set_photo(*pair, "Pasted photo file"),
+                "Loading clipboard file…",
+            )
             return
-        try:
-            photo, path = load_clipboard_photo()
-        except Exception as error:
-            messagebox.showinfo("Paste photo", str(error))
-            return "break"
-        description = f"Pasted {path.name}" if path else "Pasted photo from clipboard"
-        self.set_photo(photo, path, description)
-        return "break"
-
-    def set_photo(self, photo, path, description):
-        """Select a new source and clear the previous name, result, and crop framing."""
-        self.path, self.photo, self.result = path, photo, None
-        self.person_name = ""
-        self.show_image(self.before, photo)
-        self.crop.set_image(None)
-        self.remove_button.configure(state="normal")
-        self.save_button.configure(state="disabled")
-        self.status.set(description)
-
-    def remove(self):
-        """Disable photo actions and submit local background removal to the worker."""
-        self.busy = True
-        self.active_mode = self.removal_mode.get()
-        for button in self.mode_buttons:
-            button.configure(state="disabled")
-        self.open_button.configure(state="disabled")
-        self.paste_button.configure(state="disabled")
-        self.remove_button.configure(state="disabled")
-        self.save_button.configure(state="disabled")
-        self.crop.set_image(None)
-        self.progress.start(12)
-        self.status.set(
-            "Comparing portrait modes locally…"
-            if self.active_mode == "Auto"
-            else "Removing background locally… The first photo takes a little longer."
+        QMessageBox.information(
+            self, "Paste photo", "Copy a photo or image file first."
         )
-        self.future = self.pool.submit(
-            self.process, self.photo.copy(), self.active_mode
-        )
-        self.root.after(100, self.poll)
+
+    def mode_changed(self, name):
+        """Select a local model and reprocess an existing idle removal result."""
+        self.removal_mode = name
+        if hasattr(self, "crop") and self.crop.cutout is not None and not self.busy:
+            self.remove()
 
     def process(self, photo, mode="Auto"):
-        """Run the requested removal mode off the UI thread and return its RGBA cutout."""
+        """Run the selected local model on a worker without accessing Qt controls."""
         return self.removers[mode].remove(photo)
 
-    def poll(self):
-        """Consume a completed worker result and update Tk widgets on the UI thread."""
-        if not self.future.done():
-            self.root.after(100, self.poll)
+    def remove(self):
+        """Submit a single inference job while Qt remains available for painting."""
+        if self.busy or self.photo is None:
             return
-        self.progress.stop()
-        self.busy = False
-        for button in self.mode_buttons:
-            button.configure(state="normal")
-        self.open_button.configure(state="normal")
-        self.paste_button.configure(state="normal")
-        self.remove_button.configure(state="normal")
-        try:
-            cutout = self.future.result()
-            self.result = format_portrait(cutout)
-        except Exception as error:
-            self.status.set("Processing failed. See the message for details.")
-            messagebox.showerror("Could not remove background", str(error))
-            return
-        self.crop.set_image(cutout)
-        self.save_button.configure(state="normal")
-        prefix = ""
-        if self.active_mode == "Auto":
-            selected = self.removers["Auto"].last_mode
-            prefix = (
-                "Auto selected "
-                + ("Protect person" if selected == "protected" else "Fine hair")
-                + " · "
-            )
-        self.status.set(
-            prefix
-            + "Drag and zoom to frame your photo, then save — 2 × 2 inches, 600 DPI."
+        self.active_mode = self.removal_mode
+        generation, photo, mode = self.generation, self.photo, self.active_mode
+        self._work(
+            lambda: self.process(photo, mode),
+            lambda image: self.accept_removal(generation, image, None),
+            "Removing background locally…",
         )
 
+    def accept_removal(self, generation, cutout, error):
+        """Apply only a current model result and restore controls after an error."""
+        if generation != self.generation:
+            return
+        self._set_busy(False)
+        if error is not None:
+            QMessageBox.warning(self, "Could not remove background", str(error))
+            return
+        self.set_cutout(cutout)
+        prefix = ""
+        if self.active_mode == "Auto":
+            chosen = self.removers["Auto"].last_mode
+            prefix = (
+                "Auto selected "
+                + ("Protect person" if chosen == "protected" else "Fine hair")
+                + " · "
+            )
+        self.status_label.setText(
+            prefix + "Ready — Edit artifacts, adjust framing, or save your 2 × 2 photo."
+        )
+
+    def open_editor(self):
+        """Open one separate modal editor to protect document ownership while editing."""
+        if self.busy or self.crop.cutout is None:
+            return
+        from qt_editor import CleanupEditor
+
+        editor = CleanupEditor(self.crop.cutout, self)
+        self.editor = editor
+        if editor.exec() == editor.DialogCode.Accepted:
+            self.apply_edits(editor.edited_image())
+        self.editor = None
+        editor.deleteLater()
+
+    def apply_edits(self, image):
+        """Commit corrected alpha without resetting framing or brightness."""
+        self.result = image
+        self.crop.set_image(image, reset=False)
+        self.status_label.setText("Edits applied — original photo preserved")
+
+    def open_changelog(self):
+        """Reuse the local version browser instead of accumulating duplicate windows."""
+        if self.changelog_window is None:
+            self.changelog_window = changelog_dialog(self, VERSION)
+        self.changelog_window.show()
+        self.changelog_window.raise_()
+        self.changelog_window.activateWindow()
+
     def save(self):
-        """Ask for a name and save the framed white PNG with exclusive, numbered filenames."""
-        person_name = ask_person_name(self.root, self.person_name)
-        if person_name is None:
+        """Choose a safe name and export original-resolution pixels on a worker."""
+        if self.busy or self.crop.cutout is None:
+            return
+        name = ask_person_name(self, self.person_name)
+        if name is None:
             return
         try:
-            filename = portrait_filename(person_name)
+            filename = portrait_filename(name)
         except ValueError as error:
-            messagebox.showerror("Invalid name", str(error))
+            QMessageBox.warning(self, "Invalid name", str(error))
             return
-        self.person_name = person_name
-        path = filedialog.asksaveasfilename(
-            defaultextension=".png",
-            initialfile=filename,
-            confirmoverwrite=False,
-            filetypes=[("PNG image", "*.png")],
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save 2 × 2 portrait",
+            filename,
+            "PNG image (*.png)",
+            options=QFileDialog.Option.DontConfirmOverwrite,
         )
         if not path:
             return
-        if self.path is not None and Path(path).resolve() == self.path.resolve():
-            messagebox.showerror(
-                "Choose a different filename",
-                "Save the finished portrait to a new file to preserve your original.",
+        destination = Path(path)
+        if destination.suffix.lower() != ".png":
+            destination = destination.with_suffix(".png")
+        if self.path is not None and destination.resolve() == Path(self.path).resolve():
+            QMessageBox.warning(
+                self,
+                "Choose another filename",
+                "Save a new file to preserve your original photo.",
             )
             return
-        try:
-            result = self.crop.export() if self.crop.cutout is not None else self.result
-            while True:
-                destination = available_photo_path(path)
-                try:
-                    save_portrait(result, destination, overwrite=False)
-                except FileExistsError:
-                    continue
-                break
-        except Exception as error:
-            messagebox.showerror("Could not save", str(error))
-            return
-        self.status.set(
-            f"Saved {destination.name} — 2 × 2 inches, 1200 × 1200 pixels, 600 DPI, white background."
+        self.person_name = name
+        cutout, zoom, offset, brightness = (
+            self.crop.cutout,
+            self.crop.zoom,
+            self.crop.offset,
+            self.crop.brightness,
         )
 
-    def close(self):
-        """Wait for active processing, schedule a verified launcher refresh, and close the UI."""
-        if self.future is not None and not self.future.done():
-            self.status.set(
-                "Please wait for the current photo to finish before closing."
-            )
+        def export():
+            """Claim a destination exclusively so another process cannot cause overwrite."""
+            image = frame_portrait(cutout, zoom, offset, brightness=brightness)
+            while True:
+                target = available_photo_path(destination)
+                try:
+                    save_portrait(image, target, overwrite=False)
+                    return target
+                except FileExistsError:
+                    continue
+
+        self._work(
+            export,
+            lambda target: self.status_label.setText(
+                f"Saved {target.name} — 1200 × 1200 pixels · 600 DPI · White PNG"
+            ),
+            "Saving portrait…",
+        )
+
+    def closeEvent(self, event):
+        """Defer shutdown until callbacks drain without blocking or terminating threads."""
+        if self.jobs.busy:
+            self.status_label.setText("Finishing current work before closing…")
+            event.ignore()
+            if not self._close_timer_pending:
+                self._close_timer_pending = True
+                QTimer.singleShot(100, self._retry_close)
             return
+        self.jobs.shutdown()
         try:
             from launcher_refresh import request_launcher_refresh
 
@@ -437,12 +530,24 @@ class PortraitApp:
         except Exception:
             import logging
 
-            logging.getLogger(__name__).exception("Could not schedule launcher refresh")
-        self.pool.shutdown(wait=False, cancel_futures=True)
-        self.root.destroy()
+            logging.getLogger(__name__).exception("Launcher refresh deferred")
+        event.accept()
+
+    def _retry_close(self):
+        """Let queued paints and results execute before retrying graceful window closure."""
+        self._close_timer_pending = False
+        self.close()
+
+
+def run():
+    """Start the native Qt application and retain the main window for its event loop."""
+    application = QApplication.instance() or QApplication(sys.argv)
+    application.setStyle("Fusion")
+    application.setApplicationName("IDFrame")
+    window = PortraitApp()
+    window.show()
+    return application.exec()
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    PortraitApp(root)
-    root.mainloop()
+    raise SystemExit(run())

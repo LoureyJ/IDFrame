@@ -181,9 +181,16 @@ def main():
         source = work / "source"
         shutil.copytree(ROOT / "dist" / "client" / "payload", source)
         application = source / "app.py"
+        application_source = application.read_text(encoding="utf-8")
+        title_setter = (
+            "self.setWindowTitle("
+            if "self.setWindowTitle(" in application_source
+            else "root.title("
+        )
+        assert title_setter in application_source
         application.write_text(
-            application.read_text(encoding="utf-8").replace(
-                "root.title(", 'root.title("Portrait Studio LAN Updated " + ', 1
+            application_source.replace(
+                title_setter, title_setter + '"IDFrame LAN Updated " + ', 1
             ),
             encoding="utf-8",
         )

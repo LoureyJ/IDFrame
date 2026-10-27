@@ -4,9 +4,11 @@
 
 | File or folder | Purpose |
 | --- | --- |
-| `app.py` | Tk interface, photo state, worker coordination, and save actions. |
+| `app.py` | PySide6 main window, photo state, worker coordination, and save actions. |
 | `portrait.py` | CPU model sessions, model preprocessing, automatic selection, and white-background export. |
-| `portrait_crop.py` | Interactive crop preview using the same geometry as saved photos. |
+| `qt_preview.py`, `qt_jobs.py` | Cached image painting, crop interaction, and queued worker results. |
+| `qt_editor.py`, `mask_document.py` | Separate eraser editor and bounded alpha-only Undo/Redo history. |
+| `qt_theme.py`, `qt_dialogs.py` | Qt appearance, name prompt, and offline changelog browser. |
 | `photo_clipboard.py`, `photo_naming.py` | Clipboard input and safe person-based filenames. |
 | `changelog.py`, `windows_branding.py` | Offline release notes and installed Windows shortcuts. |
 | `deployment/` | Signed LAN manifests, verified updates, recovery, host management, and client startup. |
@@ -18,7 +20,8 @@
 
 Give every project-owned function a purpose docstring, including nested callbacks
 and test helpers. Explain invariants and non-obvious decisions with nearby comments.
-Keep UI changes on the Tk thread; inference and downloads run in workers. Preserve
+Keep application UI changes on the Qt GUI thread; inference and image preparation
+run in workers. The separate update launcher retains its small Tk dialog. Preserve
 public callback names and deployment filenames used by existing installed clients.
 
 Use Black for consistent formatting and Ruff for syntax and unused-name checks.

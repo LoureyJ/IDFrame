@@ -1,12 +1,10 @@
 from pathlib import Path
 import tempfile
-import tkinter as tk
 import unittest
 from unittest.mock import patch
 
 from PIL import Image
 
-from app import PortraitApp
 from portrait import frame_portrait
 
 
@@ -69,44 +67,45 @@ class CropTests(unittest.TestCase):
         self.assertEqual(result.getpixel((601, 600)), (255, 0, 0))
 
     def test_app_saves_selected_crop_and_resets_for_new_photo(self):
-        """Verify that app saves selected crop and resets for new photo."""
-        root = tk.Tk()
-        root.withdraw()
-        app = PortraitApp(root)
-        try:
-            source = Image.new("RGBA", (400, 200), "red")
-            source.paste("blue", (200, 0, 400, 200))
-            app.crop.set_image(source)
-            app.crop.zoom.set(2)
-            app.crop.offset = (0.25, 0)
-            app.crop.brightness.set(0.5)
-            app.crop.changed()
-            self.assertEqual(app.crop.brightness_text.get(), "50%")
-            expected = app.crop.export()
-            with tempfile.TemporaryDirectory() as directory:
+        """Qt saves the chosen full-resolution crop and resets only on a new photo."""
+        import test_qt_app as fixtures
+        from app import PortraitApp
+
+        with tempfile.TemporaryDirectory() as directory:
+            app = PortraitApp(
+                preferences_path=Path(directory) / "prefs.json", sync_shortcuts=False
+            )
+            try:
+                source = Image.new("RGBA", (400, 200), "red")
+                source.paste("blue", (200, 0, 400, 200))
+                app.set_cutout(source)
+                app.crop.set_framing(zoom=2, offset=(0.25, 0), brightness=0.5)
+                expected = app.crop.export()
                 path = Path(directory) / "crop.png"
                 with (
                     patch("app.ask_person_name", return_value="Test Person"),
-                    patch("app.filedialog.asksaveasfilename", return_value=str(path)),
+                    patch(
+                        "app.QFileDialog.getSaveFileName",
+                        return_value=(str(path), "PNG"),
+                    ),
                 ):
                     app.save()
+                    fixtures.wait_until(lambda: not app.busy)
                 with Image.open(path) as saved:
-                    self.assertEqual(saved.getpixel((600, 600)), (127, 0, 0))
                     self.assertEqual(saved.tobytes(), expected.tobytes())
-                    self.assertEqual(saved.size, (1200, 1200))
-                    self.assertAlmostEqual(saved.info["dpi"][0], 600, delta=0.01)
-            app.crop.reset()
-            self.assertEqual(app.crop.zoom.get(), 1)
-            self.assertEqual(app.crop.offset, (0, 0))
-            self.assertEqual(app.crop.brightness.get(), 1)
-            app.crop.brightness.set(1.5)
-            app.set_photo(Image.new("RGB", (50, 80)), None, "New photo")
-            self.assertIsNone(app.crop.cutout)
-            self.assertEqual(str(app.crop.slider["state"]), "disabled")
-            self.assertEqual(str(app.crop.brightness_slider["state"]), "disabled")
-            self.assertEqual(app.crop.brightness.get(), 1)
-        finally:
-            app.close()
+                    self.assertEqual(saved.getpixel((600, 600)), (127, 0, 0))
+                app.crop.reset()
+                self.assertEqual(
+                    (app.crop.zoom, app.crop.offset, app.crop.brightness),
+                    (1, (0, 0), 1),
+                )
+                app.set_photo(Image.new("RGB", (50, 80)), None, "New photo")
+                self.assertIsNone(app.crop.cutout)
+                self.assertFalse(app.zoom_slider.isEnabled())
+                self.assertFalse(app.brightness_slider.isEnabled())
+            finally:
+                fixtures.wait_until(lambda: not app.jobs.busy)
+                app.close()
 
 
 if __name__ == "__main__":

@@ -34,6 +34,18 @@ The white background stays white. Reset restores full photo framing and neutral
 brightness. Saving uses the selected crop and brightness from the full-resolution
 cutout; the original photo is preserved. Opening a new photo resets brightness.
 
+The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop dragging
+paint cached image data rather than repeatedly resampling full-size photos.
+Loading, AI inference, display preparation and saving run outside the GUI thread.
+
+After removal, choose **Edit** to open the separate portrait cleanup window.
+Drag to erase unwanted residue, adjust the eraser diameter, and use Undo/Redo
+(Ctrl+Z / Ctrl+Y). Wheel to zoom; middle-drag or Space-drag to pan. **Apply** keeps
+the corrected mask and current crop/brightness; **Cancel** discards this editing
+session. Reset Adjustments resets framing and lighting, not applied erasures.
+Opening another photo or rerunning removal creates a fresh result. Source files
+remain untouched, and no client photos are collected or uploaded.
+
 ## Client installers and LAN updates
 
 The modern workspace provides side-by-side photo previews and a right editing
@@ -50,17 +62,18 @@ On the host, use `build_installer.bat`, `start_host.bat`, and `update.bat`.
 
 ## Windows quick start
 
-1. Install Python 3.12 with the Python launcher and Tkinter (included in the standard Windows installer).
+1. Install Python 3.12 with the Python launcher and Tkinter (used by the separate updater).
 2. Double-click `setup.bat`. This one-time step requires internet to install dependencies
    and download the approximately 176 MB portrait model.
 3. Double-click `launch.bat`.
-4. Choose **Open photo**, **Remove background**, adjust the 2 × 2 crop if needed, then **Save PNG**.
+4. Choose **Open Photo**, **Remove Background**, optionally **Edit**, adjust framing, then **Save 2×2 Photo**.
 
 You can also choose **Paste photo** or press **Ctrl+V** after copying an image
 or a photo file in Windows. Pasted photos use the same white, 2 × 2 inch,
-600 DPI export. The pending client version is **1.1.11**, displayed in the title
-and app heading. The preserved version 1.1 installer contains the earlier
-208 × 208 export; clients receive the new dimensions when you publish this update.
+600 DPI export. The client version is displayed in the title and app heading.
+The existing v1.1.15 installer contains the previous Tk interface. The Qt migration
+requires the complete rebuilt runtime, not just updated Python source files.
+Existing installers remain unchanged until a new installer is explicitly built.
 
 Choose **Changelog** beside the application heading to browse offline release notes
 by version. Your installed version is selected automatically. Release notes travel

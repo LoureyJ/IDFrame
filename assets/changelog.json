@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.1.16",
+    "changes": [
+      "Moved the main workspace to PySide6 with resizable windows, rounded Light/Dark controls and cached previews. Loading, background removal, preview preparation and saving run outside the interface thread.",
+      "Added a separate Edit portrait window to erase unwanted residue, adjust eraser size, zoom and pan, and undo or redo strokes. Apply keeps the edits; Cancel preserves the previous result. Crop and brightness are retained when edits are applied.",
+      "Kept white 2×2 inch, 1200×1200 pixel / 600 DPI PNG exports, safe person-based naming, clipboard paste and visible removal-mode choices. Improved window sizing for small or scaled displays.",
+      "Prepared the complete Qt runtime for the existing signed LAN updater. Publication remains controlled by the host; installed clients keep working offline."
+    ]
+  },
+  {
     "version": "1.1.15",
     "changes": [
       "Introduced the combined modern workspace with side-by-side Original and 2×2 Preview cards, a right editing panel, rounded buttons and cards, and three visible removal-mode radio choices.",

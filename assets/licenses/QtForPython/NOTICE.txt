@@ -1,0 +1,17 @@
+IDFrame uses Qt for Python (PySide6 Essentials), Shiboken6 and Qt 6.10.3.
+Copyright The Qt Company Ltd. and contributors.
+
+These components are used under the GNU Lesser General Public License version 3.
+The LGPL-3.0 and GPL-3.0 texts accompany this notice. IDFrame does not modify or
+statically link the Qt libraries; frozen Windows builds contain separate library
+files under payload/_internal/PySide6 and payload/_internal/shiboken6.
+
+Corresponding upstream source and component notices for this version:
+https://code.qt.io/cgit/pyside/pyside-setup.git/tree/?h=v6.10.3
+https://code.qt.io/cgit/qt/qtbase.git/tree/?h=v6.10.3
+https://code.qt.io/cgit/qt/qtsvg.git/tree/?h=v6.10.3
+https://code.qt.io/cgit/qt/qtimageformats.git/tree/?h=v6.10.3
+
+Qt licensing information:
+https://doc.qt.io/qt-6/licensing.html
+https://doc.qt.io/qtforpython-6/licenses.html

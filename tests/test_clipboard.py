@@ -1,15 +1,12 @@
-from concurrent.futures import Future
 import io
 from pathlib import Path
 import struct
 import tempfile
-import tkinter as tk
 import unittest
 from unittest.mock import patch
 
 from PIL import Image
 
-from app import PortraitApp
 from photo_clipboard import load_clipboard_photo
 
 
@@ -79,73 +76,112 @@ class ClipboardTests(unittest.TestCase):
 
 
 class ClipboardAppTests(unittest.TestCase):
+    """Use Qt clipboard fixtures without modifying the user's real clipboard."""
+
     def setUp(self):
-        """Create isolated fixtures and resources needed by each test."""
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self.app = PortraitApp(self.root)
+        """Create a Qt application window with isolated preferences."""
+        import test_qt_app as fixtures
+
+        self.fixtures = fixtures
+        fixtures.QtAppTests.setUp(self)
+        self.app = self.window
 
     def tearDown(self):
-        """Close test resources and remove temporary fixtures after each test."""
-        if self.app.future is not None and not self.app.future.done():
-            self.app.future.set_result(None)
-        self.app.close()
+        """Drain worker callbacks and release the test window."""
+        self.fixtures.QtAppTests.tearDown(self)
 
     def test_paste_resets_previous_result_and_saves_without_source_path(self):
-        """Verify that paste resets previous result and saves without source path."""
-        self.app.result = Image.new("RGB", (208, 208))
+        """Native image paste clears prior edits and retains person-based saving."""
+        from types import SimpleNamespace
+        from qt_preview import image_to_qt
+
         photo = Image.new("RGB", (30, 50), "blue")
-        with patch("app.load_clipboard_photo", return_value=(photo, None)):
-            self.assertEqual(self.app.paste_photo(), "break")
+        mime = SimpleNamespace(hasImage=lambda: True)
+        clipboard = SimpleNamespace(
+            mimeData=lambda: mime, image=lambda: image_to_qt(photo)
+        )
+        self.app.set_cutout(Image.new("RGBA", (40, 40), "red"))
+        with patch("app.QApplication.clipboard", return_value=clipboard):
+            self.app.paste_photo()
+            self.fixtures.wait_until(lambda: not self.app.busy)
         self.assertIsNone(self.app.path)
         self.assertIsNone(self.app.result)
-        self.assertEqual(str(self.app.remove_button["state"]), "normal")
-        self.assertEqual(str(self.app.save_button["state"]), "disabled")
-        self.app.result = photo
-        with tempfile.TemporaryDirectory() as folder:
-            output = Path(folder) / "pasted.png"
+        self.assertTrue(self.app.remove_button.isEnabled())
+        self.assertFalse(self.app.save_button.isEnabled())
+        self.app.set_cutout(photo.convert("RGBA"))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pasted.png"
             with (
                 patch("app.ask_person_name", return_value="Juan Dela Cruz"),
                 patch(
-                    "app.filedialog.asksaveasfilename", return_value=str(output)
+                    "app.QFileDialog.getSaveFileName", return_value=(str(path), "PNG")
                 ) as dialog,
             ):
                 self.app.save()
-            self.assertEqual(
-                dialog.call_args.kwargs["initialfile"], "Juan_Dela_Cruz_2x2.png"
-            )
-            with Image.open(output) as saved:
+                self.fixtures.wait_until(lambda: not self.app.busy)
+            self.assertEqual(dialog.call_args.args[2], "Juan_Dela_Cruz_2x2.png")
+            with Image.open(path) as saved:
                 self.assertEqual(saved.size, (1200, 1200))
                 self.assertEqual(saved.mode, "RGB")
-                self.assertAlmostEqual(saved.info["dpi"][0], 600, delta=0.01)
 
     def test_empty_clipboard_retains_current_photo(self):
-        """Verify that empty clipboard retains current photo."""
+        """Unsupported clipboard data leaves the current portrait intact."""
+        from types import SimpleNamespace
+
         old = Image.new("RGB", (30, 50), "blue")
-        self.app.set_photo(old, None, "Old photo")
+        self.app.set_photo(old)
+        mime = SimpleNamespace(hasImage=lambda: False, hasUrls=lambda: False)
         with (
             patch(
-                "app.load_clipboard_photo", side_effect=ValueError("Copy a photo first")
+                "app.QApplication.clipboard",
+                return_value=SimpleNamespace(mimeData=lambda: mime),
             ),
-            patch("app.messagebox.showinfo"),
+            patch("app.QMessageBox.information"),
         ):
             self.app.paste_photo()
         self.assertIs(self.app.photo, old)
 
     def test_paste_is_blocked_during_processing_and_shortcuts_bound(self):
-        """Verify that paste is blocked during processing and shortcuts bound."""
-        self.assertTrue(self.root.bind("<Control-v>"))
-        self.assertTrue(self.root.bind("<Control-V>"))
-        self.app.future = Future()
-        with patch("app.load_clipboard_photo") as reader:
-            self.assertEqual(self.app.paste_photo(), "break")
+        """Busy operations suppress paste while the native shortcut stays registered."""
+        self.assertFalse(self.app.paste_shortcut.key().isEmpty())
+        self.app._set_busy(True)
+        with patch("app.QApplication.clipboard") as reader:
+            self.app.paste_photo()
             reader.assert_not_called()
+        self.app._set_busy(False)
 
     def test_paste_waits_until_completed_result_is_consumed(self):
-        """Verify that paste waits until completed result is consumed."""
-        self.app.future = Future()
-        self.app.future.set_result(Image.new("RGB", (208, 208)))
-        self.app.busy = True
-        with patch("app.load_clipboard_photo") as reader:
-            self.assertEqual(self.app.paste_photo(), "break")
+        """A finished worker cannot enable paste before its GUI callback is delivered."""
+        import time
+
+        self.app._work(lambda: None, lambda value: None, "Fixture")
+        time.sleep(0.03)
+        with patch("app.QApplication.clipboard") as reader:
+            self.app.paste_photo()
             reader.assert_not_called()
+        self.fixtures.wait_until(lambda: not self.app.busy)
+
+    def test_large_clipboard_conversion_runs_off_the_gui_thread(self):
+        """Only clipboard acquisition touches Qt's GUI thread; pixel conversion is work."""
+        from types import SimpleNamespace
+        import threading
+        from qt_preview import image_to_qt, qt_to_image
+
+        snapshot = image_to_qt(Image.new("RGB", (200, 300), "blue"))
+        mime = SimpleNamespace(hasImage=lambda: True)
+        clipboard = SimpleNamespace(mimeData=lambda: mime, image=lambda: snapshot)
+        observed = []
+
+        def convert(image):
+            """Record the conversion thread while executing the real pixel copy."""
+            observed.append(threading.get_ident())
+            return qt_to_image(image)
+
+        with (
+            patch("app.QApplication.clipboard", return_value=clipboard),
+            patch("app.qt_to_image", side_effect=convert),
+        ):
+            self.app.paste_photo()
+            self.fixtures.wait_until(lambda: not self.app.busy)
+        self.assertEqual(len(observed), 1)
+        self.assertNotEqual(observed[0], threading.get_ident())

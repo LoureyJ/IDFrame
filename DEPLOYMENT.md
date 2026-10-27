@@ -4,7 +4,7 @@
 
 | File | Use |
 | --- | --- |
-| `dist/installer/PortraitStudio-Setup-1.1.0.exe` | Current built installer baseline; newer prepared changes arrive when you publish OTA. |
+| `dist/installer/IDFrame-Setup-1.1.15.exe` | Preserved Tk installer baseline; the PySide6 migration arrives as a complete runtime update when you publish OTA. |
 | `start_host.bat` | Start your host's background OTA server. |
 | `stop_host.bat` | Stop this project's background OTA server. |
 | `update.bat` | Run on the host after editing application code. |
@@ -33,8 +33,8 @@ is stopped. Publishing does not require restarting a running host server.
 ## First deployment
 
 1. On the host, open `host_settings.json` and confirm the IP and port.
-2. Give clients **PortraitStudio-Setup-1.1.0.exe**. It includes paste support,
-   600 DPI export, the custom icon, and the correct default host address.
+2. Give clients **IDFrame-Setup-1.1.15.exe**, the latest existing installer. It includes
+   paste support, the modern Tk workspace, 2 × 2 inch / 600 DPI export and the camera icon.
    Existing version 1 clients can run it over their current installation; it
    replaces the old configuration without needing any separate client scripts.
    Building a future installer requires Python 3.12, dependencies in
@@ -69,6 +69,22 @@ Windows installers for your organization requires your own code-signing certific
 
 ## Publishing code changes
 
+The PySide6 migration adds Qt native libraries to the application runtime. The
+builder includes these libraries and Windows platform plugins; copying app.py
+alone into an older runtime cannot provide them. Runtime builds use an isolated
+native-library search path so unrelated software on the host cannot supply DLLs.
+Keep the existing installer as rollback material. The launcher and its centered
+update dialog remain a separate process using Tk; the editor and photo dialogs
+use Qt. No installer or OTA release is produced by --prepare-only.
+
+An isolated integration test copied the existing v1.1.15 installed client and used
+its unchanged frozen launcher to download a signed complete Qt payload. The new
+application started successfully, retained unchanged model files, downloaded no
+blobs on the second opening, and started again with the test server offline.
+Clients on that launcher can receive the migration through normal host-controlled
+OTA; a replacement installer is optional for those clients. The first update must
+include the rebuilt runtime and its dependencies, not only application source.
+
 1. Edit `app.py`, `portrait.py`, other application Python modules in the project
    root, or files in `assets/`.
 2. Versions increment automatically for changed code, assets, models, or dependencies:
@@ -81,12 +97,11 @@ Windows installers for your organization requires your own code-signing certific
 The application title and heading display the installed client version. The generated
 `app_version.py` file is updated and delivered with each release. For local code changes,
 `build_release.py --prepare-only` reserves the new version without building an installer
-or touching the live OTA manifest. Current source prepares v1.1.15 with the modern
-rounded Light/Dark workspace, visible removal-mode radio choices, brightness adjustment,
-Explorer shortcut refresh, person-based automatic filenames, automatic host IP synchronization,
-automatic selection between Protect person / Fine hair modes, zoomable 2 × 2 crop framing, the versioned changelog, camo/low-quality
-adapted matting model, centered update dialog, and the 2 × 2 inch,
-1200 × 1200 pixel export at 600 DPI; the preserved v1.1 installer has the earlier 208 × 208 export.
+or touching the live OTA manifest. The source version remains visible in the
+application and its changelog. The PySide6 workspace adds cached previews and a
+separate cleanup editor while retaining removal modes, framing, brightness,
+person-based filenames and the white 2 × 2 inch, 1200 × 1200 pixel / 600 DPI export.
+The preserved v1.1 installer has the earlier 208 × 208 export.
 
 The update launcher shows a centered **Checking Updates** dialog with the camera logo
 and a progress bar underneath. Checking uses an animated bar; downloads report byte
