@@ -36,11 +36,12 @@ from portrait import (
 from photo_naming import portrait_filename, available_photo_path
 from windows_branding import set_taskbar_identity, sync_installed_shortcuts
 from qt_jobs import JobPool
-from qt_preview import PhotoPreview, qt_to_image
+from qt_preview import PhotoPreview, qt_to_image, image_to_qt
 from qt_theme import apply_theme, load_theme, save_theme
 from qt_dialogs import ask_person_name, changelog_dialog
 
 ROOT = Path(__file__).resolve().parent
+P3M_PREVIEW_MODEL = ROOT / "build/p3m-review/full/candidate.onnx"
 
 
 class PortraitApp(QMainWindow):
@@ -59,6 +60,7 @@ class PortraitApp(QMainWindow):
         self.editor = self.changelog_window = None
         self.jobs = JobPool(self)
         self.remover = PortraitRemover()
+        self._p3m_remover = self._p3m_model_stamp = None
         hair = PortraitRemover(mode="fine_hair")
         self.removers = {
             "Auto": AutomaticPortraitRemover(self.remover, hair),
@@ -179,6 +181,13 @@ class PortraitApp(QMainWindow):
         self.remove_button = QPushButton("Remove Background")
         self.remove_button.clicked.connect(self.remove)
         controls.addWidget(self.remove_button)
+        self.p3m_preview_button = QPushButton("Test P3M")
+        self.p3m_preview_button.setToolTip(
+            "Compare the local experimental model without changing your default"
+        )
+        self.p3m_preview_button.setVisible(P3M_PREVIEW_MODEL.is_file())
+        self.p3m_preview_button.clicked.connect(self.open_p3m_preview)
+        controls.addWidget(self.p3m_preview_button)
         self.zoom_slider, self.zoom_label = self._slider(
             controls, "Framing · Zoom", 100, 800
         )
@@ -272,6 +281,7 @@ class PortraitApp(QMainWindow):
         self.remove_button.setEnabled(not busy and self.photo is not None)
         for control in (
             self.edit_button,
+            self.p3m_preview_button,
             self.save_button,
             self.zoom_slider,
             self.brightness_slider,
@@ -440,6 +450,70 @@ class PortraitApp(QMainWindow):
             self.apply_edits(editor.edited_image())
         self.editor = None
         editor.deleteLater()
+
+    def process_p3m_preview(self, photo):
+        """Load the host-only candidate lazily and infer away from the GUI thread."""
+        metadata = P3M_PREVIEW_MODEL.stat()
+        stamp = (P3M_PREVIEW_MODEL.resolve(), metadata.st_mtime_ns, metadata.st_size)
+        if self._p3m_remover is None or stamp != self._p3m_model_stamp:
+            self._p3m_remover = PortraitRemover(
+                P3M_PREVIEW_MODEL, model_type="matting", mode="fine_hair"
+            )
+            self._p3m_model_stamp = stamp
+        result = self._p3m_remover.remove(photo)
+        if result.size != photo.size:
+            raise ValueError("P3M returned a different portrait size")
+        return result
+
+    def open_p3m_preview(self):
+        """Prepare a reversible comparison of this portrait with the local candidate."""
+        if self.busy or self.photo is None or self.crop.cutout is None:
+            return
+        if not P3M_PREVIEW_MODEL.is_file():
+            QMessageBox.information(
+                self,
+                "P3M preview",
+                "The experimental model is available only on the source host after training.",
+            )
+            return
+        photo, current = self.photo, self.crop.cutout
+        zoom, offset, brightness = (
+            self.crop.zoom,
+            self.crop.offset,
+            self.crop.brightness,
+        )
+
+        def prepare():
+            """Infer and render both exact white export frames on the existing worker."""
+            candidate = self.process_p3m_preview(photo)
+            frames = tuple(
+                image_to_qt(frame_portrait(image, zoom, offset, brightness=brightness))
+                for image in (current, candidate)
+            )
+            return candidate, frames
+
+        def compare(prepared):
+            """Commit only explicit acceptance; cancellation leaves the current photo intact."""
+            if self._close_timer_pending:
+                return
+            from qt_model_preview import ModelPreviewDialog
+
+            candidate, frames = prepared
+            dialog = ModelPreviewDialog(*frames, self)
+            try:
+                if dialog.exec() == dialog.DialogCode.Accepted:
+                    self.apply_edits(candidate)
+                    self.status_label.setText(
+                        "P3M experimental result applied to this photo — default model unchanged"
+                    )
+                else:
+                    self.status_label.setText(
+                        "P3M preview closed — current result kept"
+                    )
+            finally:
+                dialog.deleteLater()
+
+        self._work(prepare, compare, "Preparing local P3M comparison…")
 
     def apply_edits(self, image):
         """Commit corrected alpha without resetting framing or brightness."""

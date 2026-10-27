@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.17",
+    "changes": [
+      "Added Test P3M on the source host after background removal. Compare the current result with the locally trained experimental model using the same crop, brightness and white 2×2 export framing.",
+      "Keep current or close the comparison to leave the photo unchanged. Use P3M for this photo applies the candidate explicitly while preserving framing, brightness and the default removal mode.",
+      "The preview is available only where the local training candidate exists. Experimental weights are not bundled into client updates or installers; existing production models remain unchanged."
+    ]
+  },
+  {
     "version": "1.1.16",
     "changes": [
       "Moved the main workspace to PySide6 with resizable windows, rounded Light/Dark controls and cached previews. Loading, background removal, preview preparation and saving run outside the interface thread.",
