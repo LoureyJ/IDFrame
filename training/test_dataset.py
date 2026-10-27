@@ -1,6 +1,9 @@
 """Training-only regressions; run using .training-venv's Python."""
 
 from pathlib import Path
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -27,18 +30,20 @@ class DatasetTests(unittest.TestCase):
                 "camo/same.jpg",
                 "low qual/same.jpg",
                 "low qual/same.avif",
+                "new photos/phone.HEIC",
+                "new photos/phone.heif",
             ]:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
             (root / "notes.txt").touch()
             photos = discover_photos(root)
-            self.assertEqual(len(photos), 4)
+            self.assertEqual(len(photos), 6)
             self.assertEqual(
                 discover_photos(root, recursive=False), [root / "same.jpg"]
             )
             outputs = [preview_path(p, root, root / "out") for p in photos]
-            self.assertEqual(len(set(outputs)), 4)
+            self.assertEqual(len(set(outputs)), 6)
             self.assertIn(root / "out/low qual/same.avif.png", outputs)
 
     def test_avif_decodes_with_training_preprocessing(self):
@@ -50,6 +55,31 @@ class DatasetTests(unittest.TestCase):
             self.assertEqual(tuple(tensor.shape), (1, 3, 384, 512))
             self.assertGreaterEqual(float(tensor.min()), -1)
             self.assertLessEqual(float(tensor.max()), 1)
+
+    def test_heic_decodes_and_orients_without_manual_plugin_registration(self):
+        """Phone portraits load in a fresh training process with their upright orientation."""
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "portrait.HEIC"
+            exif = Image.Exif()
+            exif[274] = 6
+            Image.new("RGB", (120, 90), (120, 80, 60)).save(path, exif=exif.tobytes())
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import json,sys; from adapt_modnet import tensor_from_photo; print(json.dumps(list(tensor_from_photo(sys.argv[1]).shape)))",
+                    str(path),
+                ],
+                cwd=Path(__file__).resolve().parent,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [1, 3, 512, 384])
 
     def test_unknown_edges_are_not_supervised_and_flip_matches_photo(self):
         """Verify that unknown edges are not supervised and flip matches photo."""

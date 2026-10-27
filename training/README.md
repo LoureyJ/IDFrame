@@ -1,5 +1,17 @@
 # Local portrait adaptation
 
+## New local photos, 27 October 2026
+
+The new batch contains 22 supplied photos, including three HEIC files. Training
+uses local, upright copies and coarse interior labels, with the 19 previous
+portraits replayed to preserve prior behavior. No reference alpha mattes were
+provided. See [the training record](NEW_PHOTOS_2026-10-27.md) for completed runs,
+comparison results and the model-selection decision.
+
+Training now discovers `.heic` and `.heif` and loads them through the host-only
+`pillow-heif` dependency, including orientation handling. Install
+`training/requirements.txt` into `.training-venv`; client requirements are unchanged.
+
 ## Public P3M-10k supervised training
 
 The newly authorized run uses public RGB/continuous-alpha pairs, not client photos.

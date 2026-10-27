@@ -25,16 +25,29 @@ sys.path.insert(0, str(ROOT / "training" / "vendor" / "MODNet"))
 from src.models.modnet import MODNet
 
 
+def load_training_photo(path):
+    """Decode an independent upright RGB image, registering the host-only HEIC codec when needed."""
+    if Path(path).suffix.lower() in {".heic", ".heif"}:
+        try:
+            import pillow_heif
+        except ImportError as error:
+            raise RuntimeError(
+                "HEIC training requires pillow-heif. Install training/requirements.txt in the training environment."
+            ) from error
+        pillow_heif.register_heif_opener()
+    with Image.open(path) as image:
+        return ImageOps.exif_transpose(image).convert("RGB")
+
+
 def tensor_from_photo(path, max_side=512, flip=False):
     """Orient, optionally mirror, resize, and normalize a photo for MODNet training."""
-    with Image.open(path) as image:
-        image = ImageOps.exif_transpose(image).convert("RGB")
-        scale = max_side / max(image.size)
-        size = tuple(max(64, round(side * scale / 32) * 32) for side in image.size)
-        image = image.resize(size, Image.Resampling.LANCZOS)
-        if flip:
-            image = ImageOps.mirror(image)
-        pixels = np.asarray(image, dtype=np.float32) / 127.5 - 1
+    image = load_training_photo(path)
+    scale = max_side / max(image.size)
+    size = tuple(max(64, round(side * scale / 32) * 32) for side in image.size)
+    image = image.resize(size, Image.Resampling.LANCZOS)
+    if flip:
+        image = ImageOps.mirror(image)
+    pixels = np.asarray(image, dtype=np.float32) / 127.5 - 1
     return torch.from_numpy(pixels.transpose(2, 0, 1).copy()).unsqueeze(0)
 
 
@@ -192,7 +205,8 @@ def discover_photos(root, recursive=True):
         path
         for path in (root.rglob("*") if recursive else root.iterdir())
         if path.is_file()
-        and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".avif", ".webp"}
+        and path.suffix.lower()
+        in {".jpg", ".jpeg", ".png", ".avif", ".webp", ".heic", ".heif"}
     )
 
 
@@ -211,15 +225,14 @@ def previews(model, photos, destination, photo_root):
     with torch.inference_mode():
         for photo in photos:
             alpha = model(tensor_from_photo(photo, max_side=768), True)[2][0, 0].numpy()
-            with Image.open(photo) as source:
-                source = ImageOps.exif_transpose(source).convert("RGBA")
-                mask = Image.fromarray(np.uint8(np.clip(alpha, 0, 1) * 255)).resize(
-                    source.size, Image.Resampling.LANCZOS
-                )
-                source.putalpha(mask)
-                output = preview_path(photo, photo_root, destination)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                source.save(output)
+            source = load_training_photo(photo).convert("RGBA")
+            mask = Image.fromarray(np.uint8(np.clip(alpha, 0, 1) * 255)).resize(
+                source.size, Image.Resampling.LANCZOS
+            )
+            source.putalpha(mask)
+            output = preview_path(photo, photo_root, destination)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            source.save(output)
 
 
 def main():
