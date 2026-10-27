@@ -38,6 +38,14 @@ comparison, ONNX parity and visual review pass. Evaluation records actual client
 preprocessing, equal-weight per-image errors at a maximum metric side of 768, and a
 custom boundary band; these are not official leaderboard scores.
 
+The first full run completed one epoch (9,021 optimizer steps). Both current and
+candidate ONNX models were evaluated on all 1,000 untouched official test images,
+with no inference failures. Despite selection/test improvements, the candidate
+was **not activated**: visual review found severe missing face/body regions in
+several existing low-quality photos and lost clothing in camouflage examples.
+The existing deployed model is retained. Metrics, parity and review limits are in
+[the validation record](../docs/superpowers/plans/2026-10-27-pyside6-validation.md).
+
 Public dataset: https://github.com/JizhiziLi/P3M
 Agreement: https://jizhizili.github.io/files/p3m_dataset_agreement/P3M-10k_Dataset_Release_Agreement.pdf
 Training and evaluation require host-only PyTorch, PyArrow and ONNX Runtime.
