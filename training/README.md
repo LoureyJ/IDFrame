@@ -151,6 +151,9 @@ concrete quality improvements, remaining camouflage failures, and CPU latency.
 The [fast MODNet distillation report](DISTILLATION_2026-10-28.md) records teaching
 the accepted decoder from reviewed BiRefNet soft masks, public alpha supervision,
 person-retention checks and complete client-operation timings.
+The [BEN2 and InSPyReNet evaluation](BEN2_INSPYRENET_2026-10-28.md) compares the
+official BEN2 base and InSPyReNet fast models with both installed engines on the
+same local photos, plus a bounded InSPyReNet base speed screen.
 
 Review images and logs are in `build/training-review/`:
 
