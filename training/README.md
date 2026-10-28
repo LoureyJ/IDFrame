@@ -154,6 +154,9 @@ person-retention checks and complete client-operation timings.
 The [BEN2 and InSPyReNet evaluation](BEN2_INSPYRENET_2026-10-28.md) compares the
 official BEN2 base and InSPyReNet fast models with both installed engines on the
 same local photos, plus a bounded InSPyReNet base speed screen.
+The [targeted shadow-removal experiment](SHADOW_CLEANUP_2026-10-28.md) records
+small inference and fusion-training attempts on the cast-shadow failure, with
+the quality limitations that prevented activation.
 
 Review images and logs are in `build/training-review/`:
 
