@@ -138,6 +138,10 @@ subsequent local-only run from the accepted model on the new office portraits.
 The [accepted-model P3M report](CURRENT_MODEL_P3M_2026-10-28.md) records the
 subsequent supervised fine-tune using public alpha masks and local replay,
 including public improvements and local regressions that prevented activation.
+The [three-priority training report](PRIORITY_ANCHORS_2026-10-28.md) records the
+subsequent person-retention, soft-boundary, and labeled-background objectives,
+their tests, and the failed person-first quality check. The reusable objectives
+are implemented in `priority_loss.py`; they are host-only training code.
 
 Review images and logs are in `build/training-review/`:
 
