@@ -133,6 +133,9 @@ adapted model is absent.
 
 ## Results and limits
 
+The [28 October continuation report](CONTINUATION_2026-10-28.md) records the
+subsequent local-only run from the accepted model on the new office portraits.
+
 Review images and logs are in `build/training-review/`:
 
 - `hair-comparison.png`: previous versus adapted output on the orange/red curl cases.
