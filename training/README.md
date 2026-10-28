@@ -145,6 +145,9 @@ are implemented in `priority_loss.py`; they are host-only training code.
 The [hybrid matting comparison](HYBRID_MATTING_2026-10-28.md) records a subsequent
 CPU experiment combining the existing models with trimap-based PyMatting,
 including its hair improvement and visible object/clothing failures.
+The [BiRefNet-portrait evaluation](BIREFNET_PORTRAIT_2026-10-28.md) compares the
+author's portrait ONNX against active MODNet on all 41 local examples, recording
+concrete quality improvements, remaining camouflage failures, and CPU latency.
 
 Review images and logs are in `build/training-review/`:
 
