@@ -157,6 +157,9 @@ same local photos, plus a bounded InSPyReNet base speed screen.
 The [targeted shadow-removal experiment](SHADOW_CLEANUP_2026-10-28.md) records
 small inference and fusion-training attempts on the cast-shadow failure, with
 the quality limitations that prevented activation.
+The [SDDNet shadow-detector screen](SDDNET_SHADOW_SCREEN_2026-10-28.md) tests a
+dedicated fast detector alongside MODNet and records why person protection is
+required before automatic mask subtraction can be integrated.
 
 Review images and logs are in `build/training-review/`:
 
