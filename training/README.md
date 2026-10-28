@@ -142,6 +142,9 @@ The [three-priority training report](PRIORITY_ANCHORS_2026-10-28.md) records the
 subsequent person-retention, soft-boundary, and labeled-background objectives,
 their tests, and the failed person-first quality check. The reusable objectives
 are implemented in `priority_loss.py`; they are host-only training code.
+The [hybrid matting comparison](HYBRID_MATTING_2026-10-28.md) records a subsequent
+CPU experiment combining the existing models with trimap-based PyMatting,
+including its hair improvement and visible object/clothing failures.
 
 Review images and logs are in `build/training-review/`:
 
