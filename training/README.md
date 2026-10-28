@@ -160,6 +160,9 @@ the quality limitations that prevented activation.
 The [SDDNet shadow-detector screen](SDDNET_SHADOW_SCREEN_2026-10-28.md) tests a
 dedicated fast detector alongside MODNet and records why person protection is
 required before automatic mask subtraction can be integrated.
+The [Protect-person/SDDNet fusion experiment](PROTECT_SDDNET_FUSION_2026-10-28.md)
+implements and tests a guarded mask combination, including person-interior
+restoration, and records the remaining hair and shadow trade-offs.
 
 Review images and logs are in `build/training-review/`:
 
