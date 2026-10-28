@@ -148,6 +148,9 @@ including its hair improvement and visible object/clothing failures.
 The [BiRefNet-portrait evaluation](BIREFNET_PORTRAIT_2026-10-28.md) compares the
 author's portrait ONNX against active MODNet on all 41 local examples, recording
 concrete quality improvements, remaining camouflage failures, and CPU latency.
+The [fast MODNet distillation report](DISTILLATION_2026-10-28.md) records teaching
+the accepted decoder from reviewed BiRefNet soft masks, public alpha supervision,
+person-retention checks and complete client-operation timings.
 
 Review images and logs are in `build/training-review/`:
 
