@@ -39,10 +39,12 @@ paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
 After removal, choose **Edit** to open the separate portrait cleanup window.
-Drag to erase unwanted residue, adjust the eraser diameter, and use Undo/Redo
+Choose **Erase** to remove residue or **Restore** to paint back original photo
+pixels, including areas removed by AI. Restore can also reveal the original
+background. Adjust the shared brush size and use Undo/Redo
 (Ctrl+Z / Ctrl+Y). Wheel to zoom; middle-drag or Space-drag to pan. **Apply** keeps
 the corrected mask and current crop/brightness; **Cancel** discards this editing
-session. Reset Adjustments resets framing and lighting, not applied erasures.
+session. Reset Adjustments resets framing and lighting, not applied mask edits.
 Opening another photo or rerunning removal creates a fresh result. Source files
 remain untouched, and no client photos are collected or uploaded.
 

@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.19",
+    "changes": [
+      "Added a Restore brush in Edit to paint back original photo pixels, including parts removed by AI. Switch between Erase and Restore with a shared brush size and Undo/Redo history.",
+      "Applying edits preserves crop and brightness. Source photos and the current AI models remain unchanged. Restore may reveal the original background in painted areas."
+    ]
+  },
+  {
     "version": "1.1.18",
     "changes": [
       "Removed the experimental Test P3M comparison feature at the host's request. The existing removal modes, PySide6 workspace and cleanup editor remain available.",

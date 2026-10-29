@@ -31,6 +31,34 @@ class MaskDocumentTests(unittest.TestCase):
         self.assertEqual(result.getpixel((0, 0)), (60, 90, 120, 255))
         self.assertEqual(before, self.source.tobytes())
 
+    def test_restore_reveals_ai_removed_original_pixels_and_is_reversible(self):
+        """Restoration reveals hidden source RGB even when initial AI alpha was zero."""
+        source = Image.new("RGBA", (100, 80), (60, 90, 120, 0))
+        document = MaskDocument(source)
+        before = source.tobytes()
+        document.restore_segment((20, 30), (70, 30), 12)
+        document.end_stroke()
+        restored = document.image().tobytes()
+        for x in range(20, 71):
+            self.assertEqual(document.image().getpixel((x, 30)), (60, 90, 120, 255))
+        self.assertEqual(document.image().getpixel((0, 0)), (60, 90, 120, 0))
+        document.undo()
+        self.assertEqual(document.image().tobytes(), before)
+        document.redo()
+        self.assertEqual(document.image().tobytes(), restored)
+        self.assertEqual(source.tobytes(), before)
+
+    def test_restore_and_erase_share_history_without_resetting_other_strokes(self):
+        """Restoring one erased area leaves other erased pixels and history intact."""
+        self.stroke((20, 30), (70, 30), 12)
+        erased = self.document.image().tobytes()
+        self.document.restore_segment((40, 30), (40, 30), 7)
+        self.document.end_stroke()
+        self.assertEqual(self.document.image().getpixel((40, 30))[3], 255)
+        self.assertEqual(self.document.image().getpixel((20, 30))[3], 0)
+        self.document.undo()
+        self.assertEqual(self.document.image().tobytes(), erased)
+
     def test_click_and_outside_bounds_are_safe(self):
         """A click erases a circle and off-image strokes remain clipped safely."""
         self.stroke((0, 0), (0, 0), 10)

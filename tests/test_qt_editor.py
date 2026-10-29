@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from PIL import Image
 from PySide6.QtCore import QPointF, QRect, QPoint
 from PySide6.QtWidgets import QDialog, QDialogButtonBox
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 
 import test_qt_app as fixtures
 from qt_editor import CleanupEditor
@@ -17,6 +19,49 @@ class EditorTests(unittest.TestCase):
 
     setUp = fixtures.QtAppTests.setUp
     tearDown = fixtures.QtAppTests.tearDown
+
+    def test_restore_button_reveals_original_pixels_and_supports_history(self):
+        """The Restore tool paints original RGB, with the shared size and undo/redo."""
+        source = Image.new("RGBA", (100, 80), (60, 90, 120, 0))
+        editor = CleanupEditor(source, self.window)
+        editor.size_slider.setValue(8)
+        editor.restore_button.click()
+        self.assertTrue(editor.restore_button.isChecked())
+        self.assertFalse(editor.erase_button.isChecked())
+        editor.view.paint_at(QPointF(40, 30), QPointF(60, 30), source_coordinates=True)
+        editor.view.finish_stroke()
+        self.assertEqual(editor.edited_image().getpixel((50, 30)), (60, 90, 120, 255))
+        editor.undo_button.click()
+        self.assertEqual(editor.edited_image().getpixel((50, 30))[3], 0)
+        editor.redo_button.click()
+        self.assertEqual(editor.edited_image().getpixel((50, 30))[3], 255)
+        editor.erase_button.click()
+        editor.view.paint_at(QPointF(50, 30), QPointF(50, 30), source_coordinates=True)
+        editor.accept()
+        self.assertEqual(editor.edited_image().getpixel((50, 30))[3], 0)
+        self.assertEqual(source.getpixel((50, 30)), (60, 90, 120, 0))
+        editor.deleteLater()
+
+    def test_restore_mouse_click_applies_to_portrait_without_resetting_framing(self):
+        """A real Restore click repairs AI alpha and commits while keeping adjustments."""
+        source = Image.new("RGBA", (100, 80), (60, 90, 120, 255))
+        source.putpixel((50, 40), (60, 90, 120, 0))
+        self.window.set_cutout(source)
+        self.window.crop.set_framing(zoom=2, offset=(0.1, 0.1), brightness=0.75)
+        editor = CleanupEditor(source, self.window)
+        editor.show()
+        fixtures.QT_APP.processEvents()
+        editor.restore_button.click()
+        point = editor.view.source_to_view(QPointF(50, 40)).toPoint()
+        QTest.mouseClick(editor.view, Qt.MouseButton.LeftButton, pos=point)
+        editor.accept()
+        self.window.apply_edits(editor.edited_image())
+        self.assertEqual(self.window.crop.cutout.getpixel((50, 40)), (60, 90, 120, 255))
+        self.assertEqual(self.window.crop.zoom, 2)
+        self.assertEqual(self.window.crop.offset, (0.1, 0.1))
+        self.assertEqual(self.window.crop.brightness, 0.75)
+        self.assertEqual(source.getpixel((50, 40))[3], 0)
+        editor.deleteLater()
 
     def test_small_screen_contains_editor_apply_action(self):
         """Editor controls remain reachable below the previous fixed minimum size."""
@@ -46,7 +91,7 @@ class EditorTests(unittest.TestCase):
         source = Image.new("RGBA", (100, 80), "red")
         original = source.tobytes()
         editor = CleanupEditor(source, self.window)
-        editor.view.erase_at(QPointF(40, 30), QPointF(60, 30), source_coordinates=True)
+        editor.view.paint_at(QPointF(40, 30), QPointF(60, 30), source_coordinates=True)
         editor.view.finish_stroke()
         editor.reject()
         self.assertEqual(editor.result(), QDialog.DialogCode.Rejected)
@@ -59,7 +104,7 @@ class EditorTests(unittest.TestCase):
         self.window.set_cutout(source)
         self.window.crop.set_framing(zoom=2, offset=(0.1, 0.1), brightness=0.75)
         editor = CleanupEditor(source, self.window)
-        editor.view.erase_at(QPointF(50, 50), QPointF(50, 50), source_coordinates=True)
+        editor.view.paint_at(QPointF(50, 50), QPointF(50, 50), source_coordinates=True)
         editor.accept()
         self.window.apply_edits(editor.edited_image())
         self.assertEqual(self.window.crop.zoom, 2)
@@ -84,7 +129,7 @@ class EditorTests(unittest.TestCase):
         self.assertAlmostEqual(actual.x(), source_point.x())
         self.assertAlmostEqual(actual.y(), source_point.y())
         before = editor.edited_image().tobytes()
-        editor.view.erase_at(view_point, view_point)
+        editor.view.paint_at(view_point, view_point)
         editor.view.finish_stroke()
         self.assertEqual(editor.edited_image().getpixel((80, 40))[3], 0)
         self.assertTrue(editor.undo_button.isEnabled())

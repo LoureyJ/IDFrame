@@ -1,4 +1,4 @@
-"""Separate Qt alpha cleanup editor with precise source-space erasing and history."""
+"""Separate Qt alpha cleanup editor with source-space erase/restore and history."""
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QShortcut, QKeySequence
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QDialogButtonBox,
     QApplication,
+    QButtonGroup,
 )
 
 from mask_document import MaskDocument
@@ -38,6 +39,7 @@ class EraserView(QWidget):
         self._previous = None
         self._pan_start = None
         self._space = False
+        self.brush_mode = "erase"
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(200, 150)
@@ -91,7 +93,7 @@ class EraserView(QWidget):
         painter.end()
         self.update()
 
-    def erase_at(self, start, end, *, source_coordinates=False):
+    def paint_at(self, start, end, *, source_coordinates=False):
         """Apply an interpolated brush segment at either viewport or source coordinates."""
         if not source_coordinates:
             start, end = self.view_to_source(start), self.view_to_source(end)
@@ -104,10 +106,18 @@ class EraserView(QWidget):
             first, last = start + delta * (step / steps), start + delta * (
                 (step + 1) / steps
             )
-            bounds = self.document.erase_segment(
+            operation = (
+                self.document.restore_segment
+                if self.brush_mode == "restore"
+                else self.document.erase_segment
+            )
+            bounds = operation(
                 (first.x(), first.y()), (last.x(), last.y()), self.diameter
             )
             self._refresh_patch(bounds)
+
+    # Installed frozen runtimes call this name in their editor smoke check.
+    erase_at = paint_at
 
     def finish_stroke(self):
         """Commit one pointer gesture as one reversible edit operation."""
@@ -146,11 +156,12 @@ class EraserView(QWidget):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.setPen(QPen(QColor("white"), 3))
             painter.drawEllipse(self._pointer, radius, radius)
-            painter.setPen(QPen(QColor("#17243b"), 1))
+            color = "#15803d" if self.brush_mode == "restore" else "#17243b"
+            painter.setPen(QPen(QColor(color), 1))
             painter.drawEllipse(self._pointer, radius, radius)
 
     def mousePressEvent(self, event):
-        """Start erasing with left-click or panning with middle/Space-drag."""
+        """Start the selected brush with left-click or pan with middle/Space-drag."""
         self.setFocus()
         if event.button() == Qt.MouseButton.MiddleButton or (
             event.button() == Qt.MouseButton.LeftButton and self._space
@@ -159,7 +170,7 @@ class EraserView(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
         elif event.button() == Qt.MouseButton.LeftButton:
             self._previous = event.position()
-            self.erase_at(self._previous, self._previous)
+            self.paint_at(self._previous, self._previous)
 
     def mouseMoveEvent(self, event):
         """Keep the pointer preview live and interpolate each stroke or pan delta."""
@@ -169,7 +180,7 @@ class EraserView(QWidget):
             self.pan = origin + event.position() - start
             self._auto_fit = False
         elif self._previous is not None:
-            self.erase_at(self._previous, event.position())
+            self.paint_at(self._previous, event.position())
             self._previous = event.position()
         self.update()
 
@@ -218,7 +229,7 @@ class CleanupEditor(QDialog):
     """Own an isolated editing session that is committed only through Apply."""
 
     def __init__(self, cutout, parent=None):
-        """Create a resizable editor with eraser, brush size, and reversible history."""
+        """Create a resizable erase/restore editor with shared size and history."""
         super().__init__(parent)
         self.setWindowTitle("IDFrame — Edit portrait")
         self.setWindowModality(Qt.WindowModality.WindowModal)
@@ -229,12 +240,28 @@ class CleanupEditor(QDialog):
         self.document = MaskDocument(cutout)
         self.view = EraserView(self.document)
         layout = QVBoxLayout(self)
+        tools = QHBoxLayout()
+        self.erase_button = QPushButton("Erase")
+        self.restore_button = QPushButton("Restore")
+        self.tool_group = QButtonGroup(self)
+        for button in (self.erase_button, self.restore_button):
+            button.setCheckable(True)
+            self.tool_group.addButton(button)
+            tools.addWidget(button)
+        self.erase_button.setChecked(True)
+        self.erase_button.clicked.connect(lambda: self.set_brush_mode("erase"))
+        self.restore_button.clicked.connect(lambda: self.set_brush_mode("restore"))
+        self.restore_button.setToolTip(
+            "Paint back original photo pixels, including AI-removed areas"
+        )
+        tools.addStretch(1)
+        layout.addLayout(tools)
         toolbar = QHBoxLayout()
-        toolbar.addWidget(QLabel("Eraser size"))
+        toolbar.addWidget(QLabel("Brush size"))
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(1, max(10, min(500, max(cutout.size) // 4)))
         self.size_slider.setValue(round(self.view.diameter))
-        self.size_slider.setAccessibleName("Eraser diameter in source pixels")
+        self.size_slider.setAccessibleName("Brush diameter in source pixels")
         toolbar.addWidget(self.size_slider, 1)
         self.size_label = QLabel()
         toolbar.addWidget(self.size_label)
@@ -249,7 +276,8 @@ class CleanupEditor(QDialog):
         layout.addLayout(toolbar)
         layout.addWidget(self.view, 1)
         instructions = QLabel(
-            "Drag to erase · Wheel to zoom · Middle-drag or Space-drag to pan · Original photo preserved"
+            "Choose Erase or Restore, then drag to paint. Restore reveals original photo pixels, "
+            "including the original background. Wheel to zoom · Middle-drag or Space-drag to pan."
         )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
@@ -280,6 +308,16 @@ class CleanupEditor(QDialog):
         """Set diameter in original pixels and immediately redraw the brush indicator."""
         self.view.diameter = value
         self.size_label.setText(str(value) + " px")
+        self.view.update()
+
+    def set_brush_mode(self, mode):
+        """Finish the previous gesture before switching between erase and restore."""
+        if mode not in {"erase", "restore"}:
+            raise ValueError("Unsupported cleanup brush mode")
+        self.view.finish_stroke()
+        self.view.brush_mode = mode
+        self.erase_button.setChecked(mode == "erase")
+        self.restore_button.setChecked(mode == "restore")
         self.view.update()
 
     def _update_history(self):

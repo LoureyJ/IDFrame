@@ -47,6 +47,14 @@ class MaskDocument:
 
     def erase_segment(self, start, end, diameter):
         """Erase a clipped antialiased capsule between two source-space positions."""
+        return self._paint_segment(start, end, diameter, restore=False)
+
+    def restore_segment(self, start, end, diameter):
+        """Reveal original RGB, including pixels made transparent by AI or erasing."""
+        return self._paint_segment(start, end, diameter, restore=True)
+
+    def _paint_segment(self, start, end, diameter, *, restore):
+        """Apply an antialiased alpha brush while sharing clipping and stroke history."""
         values = (*start, *end, diameter)
         if not all(math.isfinite(value) for value in values) or diameter <= 0:
             raise ValueError("Brush coordinates must be finite and size positive")
@@ -72,7 +80,12 @@ class MaskDocument:
             draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=255)
         # Area averaging smooths edges without Lanczos ringing inside the brush.
         brush = brush.resize((right - left, bottom - top), Image.Resampling.BOX)
-        patch = ImageChops.multiply(self._alpha.crop(bounds), ImageChops.invert(brush))
+        current = self._alpha.crop(bounds)
+        patch = (
+            Image.composite(Image.new("L", current.size, 255), current, brush)
+            if restore
+            else ImageChops.multiply(current, ImageChops.invert(brush))
+        )
         self._alpha.paste(patch, (left, top))
         return bounds
 
