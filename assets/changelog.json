@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.21",
+    "changes": [
+      "Updated IDFrame branding to the blue-and-gold Clean Cut portrait logo across the application, update dialog, and installed desktop and taskbar shortcuts. Added multiple icon sizes for clear Windows display."
+    ]
+  },
+  {
     "version": "1.1.20",
     "changes": [
       "Updated changelog terminology to describe background removal as processing logic. Application behavior is unchanged."
