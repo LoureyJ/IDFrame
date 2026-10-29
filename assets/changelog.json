@@ -1,9 +1,15 @@
 [
   {
+    "version": "1.1.20",
+    "changes": [
+      "Updated changelog terminology to describe background removal as processing logic. Application behavior is unchanged."
+    ]
+  },
+  {
     "version": "1.1.19",
     "changes": [
-      "Added a Restore brush in Edit to paint back original photo pixels, including parts removed by AI. Switch between Erase and Restore with a shared brush size and Undo/Redo history.",
-      "Applying edits preserves crop and brightness. Source photos and the current AI models remain unchanged. Restore may reveal the original background in painted areas."
+      "Added a Restore brush in Edit to paint back original photo pixels, including parts removed by the background-removal logic. Switch between Erase and Restore with a shared brush size and Undo/Redo history.",
+      "Applying edits preserves crop and brightness. Source photos and the current processing logic remain unchanged. Restore may reveal the original background in painted areas."
     ]
   },
   {
