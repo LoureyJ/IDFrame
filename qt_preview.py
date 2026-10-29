@@ -122,7 +122,7 @@ class PhotoPreview(QWidget):
         if rotation is not None:
             if not math.isfinite(rotation):
                 raise ValueError("Invalid portrait rotation")
-            self.rotation = max(-30.0, min(30.0, float(rotation)))
+            self.rotation = max(-180.0, min(180.0, float(rotation)))
         if zoom is not None:
             self.zoom = max(1.0, min(8.0, float(zoom)))
         if offset is not None:

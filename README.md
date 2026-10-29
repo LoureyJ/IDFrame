@@ -38,11 +38,25 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
-Use **Rotation** beside Zoom to straighten a tilted portrait manually, from −30°
-to +30° in 0.1° steps. Positive angles turn clockwise. A horizontal guide appears
+Use **Rotation** beside Zoom to straighten a tilted portrait manually, from −180°
+to +180° in 0.1° steps. Positive angles turn clockwise. A horizontal guide appears
 in the 2×2 preview when the angle is nonzero; it is never included in saved photos.
 Rotation preserves crop, brightness and cleanup edits. **Reset Adjustments** also
 returns rotation to 0°. Opening another photo starts with no rotation.
+
+The top row is **Open Photo · Paste Ctrl+V · Auto-skew · Edit**, using blue, teal,
+gold and purple to identify each action. After background removal, **Auto-skew**
+estimates a reversible rotation using a bundled offline face detector, including
+sideways/upside-down orientations. It runs only when clicked. Check its result
+against the eye guide and adjust Rotation manually: the estimate can be inaccurate,
+especially on tilted, blurry or turned faces. No detected face or multiple faces
+leave rotation unchanged. Framing, brightness and cleanup pixels are preserved.
+Host setup downloads the small YuNet detector once and verifies its checksum;
+installer/OTA payloads include it. Clients do not download models from the internet.
+The detector is OpenCV Zoo's
+[YuNet 2023mar](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet),
+with its MIT license included in `assets/licenses/YuNet-MIT.txt`. It uses the
+existing ONNX Runtime dependency; the background-removal models are unchanged.
 
 After removal, choose **Edit** to open the separate portrait cleanup window.
 Choose **Erase** to remove residue or **Restore** to paint back original photo

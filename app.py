@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from app_version import VERSION
+from alignment import OfflineAligner
 from portrait import (
     PortraitRemover,
     AutomaticPortraitRemover,
@@ -59,6 +60,7 @@ class PortraitApp(QMainWindow):
         self.editor = self.changelog_window = None
         self.jobs = JobPool(self)
         self.remover = PortraitRemover()
+        self.aligner = OfflineAligner()
         hair = PortraitRemover(mode="fine_hair")
         self.removers = {
             "Auto": AutomaticPortraitRemover(self.remover, hair),
@@ -127,9 +129,20 @@ class PortraitApp(QMainWindow):
         self.open_button.clicked.connect(self.open_photo)
         self.paste_button = QPushButton("Paste · Ctrl+V")
         self.paste_button.clicked.connect(self.paste_photo)
+        self.auto_skew_button = QPushButton("Auto-skew")
+        self.auto_skew_button.setToolTip(
+            "Estimate eye-level rotation offline. Fine-tune with Rotation if needed."
+        )
+        self.auto_skew_button.clicked.connect(self.auto_skew)
         self.edit_button = QPushButton("Edit")
         self.edit_button.clicked.connect(self.open_editor)
-        for button in (self.open_button, self.paste_button, self.edit_button):
+        for button, color in (
+            (self.open_button, "blue"),
+            (self.paste_button, "teal"),
+            (self.auto_skew_button, "gold"),
+            (self.edit_button, "purple"),
+        ):
+            button.setProperty("actionColor", color)
             toolbar.addWidget(button)
         toolbar.addStretch()
         privacy = QLabel("Your photos stay on this computer")
@@ -183,11 +196,11 @@ class PortraitApp(QMainWindow):
             controls, "Framing · Zoom", 100, 800
         )
         self.rotation_slider, self.rotation_label = self._slider(
-            controls, "Framing · Rotation", -300, 300, initial=0
+            controls, "Framing · Rotation", -1800, 1800, initial=0
         )
         self.rotation_label.setText("0.0°")
         self.rotation_slider.setToolTip(
-            "Straighten tilt: −30° to +30°. Positive angles turn clockwise."
+            "Straighten tilt: −180° to +180°. Positive angles turn clockwise."
         )
         self.rotation_slider.valueChanged.connect(
             lambda value: self.crop.set_framing(rotation=value / 10)
@@ -287,6 +300,7 @@ class PortraitApp(QMainWindow):
         self.remove_button.setEnabled(not busy and self.photo is not None)
         for control in (
             self.edit_button,
+            self.auto_skew_button,
             self.save_button,
             self.zoom_slider,
             self.rotation_slider,
@@ -442,6 +456,30 @@ class PortraitApp(QMainWindow):
             )
         self.status_label.setText(
             prefix + "Ready — Edit artifacts, adjust framing, or save your 2 × 2 photo."
+        )
+
+    def auto_skew(self):
+        """Estimate absolute rotation off-thread without changing crop or cleanup pixels."""
+        if self.busy or self.crop.cutout is None:
+            return
+        source = self.photo if self.photo is not None else self.crop.cutout
+
+        def apply_angle(angle):
+            """Keep uncertain images unchanged and expose the estimate for manual correction."""
+            if angle is None:
+                self.status_label.setText(
+                    "No single usable face found — rotation unchanged. Adjust Rotation manually."
+                )
+                return
+            self.crop.set_framing(rotation=angle)
+            self.status_label.setText(
+                "Auto-skew applied — check the eye guide and fine-tune Rotation if needed."
+            )
+
+        self._work(
+            lambda: self.aligner.estimate(source),
+            apply_angle,
+            "Estimating eye-level rotation…",
         )
 
     def open_editor(self):

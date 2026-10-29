@@ -276,7 +276,7 @@ def frame_portrait(
         or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS
     ):
         raise ValueError("Invalid portrait brightness")
-    if not math.isfinite(rotation) or not -30 <= rotation <= 30:
+    if not math.isfinite(rotation) or not -180 <= rotation <= 180:
         raise ValueError("Invalid portrait rotation")
     rgba = cutout.convert("RGBA")
     if rgba.getchannel("A").getbbox() is None:

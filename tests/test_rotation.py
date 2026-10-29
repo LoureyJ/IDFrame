@@ -20,7 +20,7 @@ class RotationExportTests(unittest.TestCase):
         source = Image.new("RGBA", (200, 120))
         ImageDraw.Draw(source).ellipse((136, 56, 144, 64), fill="red")
         original = source.tobytes()
-        for degrees in (-30, -12.5, 0, 12.5, 30):
+        for degrees in (-180, -90, -30, -12.5, 0, 12.5, 30, 90, 180):
             with self.subTest(degrees=degrees):
                 result = frame_portrait(
                     source, 1.2, (0.05, -0.05), rotation=degrees, brightness=0.5
@@ -34,7 +34,7 @@ class RotationExportTests(unittest.TestCase):
 
     def test_invalid_rotation_is_rejected(self):
         """Non-finite and out-of-range rotation cannot reach the affine renderer."""
-        for value in (-31, 31, float("nan"), float("inf")):
+        for value in (-181, 181, float("nan"), float("inf")):
             with (
                 self.subTest(value=value),
                 self.assertRaisesRegex(ValueError, "rotation"),

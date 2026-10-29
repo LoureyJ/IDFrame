@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.23",
+    "changes": [
+      "Expanded manual rotation to −180° through +180° for sideways and upside-down photos, retaining precise 0.1° adjustments.",
+      "Added a best-effort Auto-skew button to estimate eye-level rotation offline when clicked. Review the result and fine-tune Rotation as needed; uncertain detections leave the angle unchanged. Framing, brightness and cleanup edits are preserved.",
+      "Arranged the top row as Open Photo, Paste Ctrl+V, Auto-skew and Edit, with distinct blue, teal, gold and purple buttons for easier identification in Light and Dark modes."
+    ]
+  },
+  {
     "version": "1.1.22",
     "changes": [
       "Added a Rotation slider beside Zoom to straighten tilted portraits manually from −30° to +30°, with 0.1° adjustments and a horizontal preview guide. The guide is not printed.",

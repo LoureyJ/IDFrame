@@ -22,6 +22,7 @@ def checksum(path):
 
 def main():
     """Download the base model once, verify its checksum, and install it atomically."""
+    download_alignment_model()
     if MODEL_PATH.exists() and checksum(MODEL_PATH) == EXPECTED_MD5:
         print("Portrait model is ready. You can now use the app offline.")
         return
@@ -53,6 +54,31 @@ def main():
     finally:
         temporary.unlink(missing_ok=True)
     print("Setup complete. Run launch.bat. Internet is no longer required.")
+
+
+def download_alignment_model():
+    """Install the small optional face detector during host setup, never at runtime."""
+    from alignment import MODEL_PATH, MODEL_URL, MODEL_SHA256
+
+    if MODEL_PATH.is_file():
+        with MODEL_PATH.open("rb") as source:
+            if hashlib.file_digest(source, "sha256").hexdigest() == MODEL_SHA256:
+                return
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = MODEL_PATH.with_suffix(".download")
+    print("Downloading offline alignment model (about 233 KB).", flush=True)
+    try:
+        with urlopen(MODEL_URL, timeout=60) as response, temporary.open("wb") as output:
+            while chunk := response.read(1024 * 1024):
+                output.write(chunk)
+        with temporary.open("rb") as source:
+            if hashlib.file_digest(source, "sha256").hexdigest() != MODEL_SHA256:
+                raise RuntimeError(
+                    "Alignment model checksum mismatch. Run setup again."
+                )
+        temporary.replace(MODEL_PATH)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
