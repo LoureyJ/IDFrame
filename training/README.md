@@ -163,6 +163,9 @@ required before automatic mask subtraction can be integrated.
 The [Protect-person/SDDNet fusion experiment](PROTECT_SDDNET_FUSION_2026-10-28.md)
 implements and tests a guarded mask combination, including person-interior
 restoration, and records the remaining hair and shadow trade-offs.
+The [ShadowFormer single-photo test](SHADOWFORMER_SINGLE_2026-10-29.md) compares
+automatic and manually guided restoration on only the requested shadow example,
+including subsequent MODNet cutouts and measured CPU stages.
 
 Review images and logs are in `build/training-review/`:
 
