@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.22",
+    "changes": [
+      "Added a Rotation slider beside Zoom to straighten tilted portraits manually from −30° to +30°, with 0.1° adjustments and a horizontal preview guide. The guide is not printed.",
+      "Saved photos include the selected rotation with the existing white 2×2 inch, 1200×1200 pixel, 600 DPI format. Rotation preserves cleanup edits and brightness; Reset Adjustments and opening another photo clear the angle."
+    ]
+  },
+  {
     "version": "1.1.21",
     "changes": [
       "Updated IDFrame branding to the blue-and-gold Clean Cut portrait logo across the application, update dialog, and installed desktop and taskbar shortcuts. Added multiple icon sizes for clear Windows display."

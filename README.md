@@ -38,6 +38,12 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
+Use **Rotation** beside Zoom to straighten a tilted portrait manually, from −30°
+to +30° in 0.1° steps. Positive angles turn clockwise. A horizontal guide appears
+in the 2×2 preview when the angle is nonzero; it is never included in saved photos.
+Rotation preserves crop, brightness and cleanup edits. **Reset Adjustments** also
+returns rotation to 0°. Opening another photo starts with no rotation.
+
 After removal, choose **Edit** to open the separate portrait cleanup window.
 Choose **Erase** to remove residue or **Restore** to paint back original photo
 pixels, including areas removed by AI. Restore can also reveal the original

@@ -250,13 +250,20 @@ def format_portrait(cutout):
 
 
 def frame_portrait(
-    cutout, zoom=1.0, offset=(0.0, 0.0), size=OUTPUT_SIZE, *, brightness=1.0
+    cutout,
+    zoom=1.0,
+    offset=(0.0, 0.0),
+    size=OUTPUT_SIZE,
+    *,
+    brightness=1.0,
+    rotation=0.0,
 ):
     """Render a movable square crop from source pixels, without allocating a huge zoomed image.
 
     Offset is measured as a fraction of the output frame, positive right/down.
     The same geometry is used for the interactive preview and full-resolution save.
     Brightness changes portrait RGB only; opacity and the white background are preserved.
+    Rotation is clockwise in degrees, applied once with crop scaling at export.
     """
     if not (
         math.isfinite(zoom)
@@ -269,18 +276,24 @@ def frame_portrait(
         or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS
     ):
         raise ValueError("Invalid portrait brightness")
+    if not math.isfinite(rotation) or not -30 <= rotation <= 30:
+        raise ValueError("Invalid portrait rotation")
     rgba = cutout.convert("RGBA")
     if rgba.getchannel("A").getbbox() is None:
         raise ValueError("No person detected. Try another portrait photo.")
     scale = min(size[0] / rgba.width, size[1] / rgba.height) * zoom
     inverse = 1 / scale
+    angle = math.radians(rotation)
+    cosine, sine = math.cos(angle) * inverse, math.sin(angle) * inverse
+    center_x = size[0] / 2 + offset[0] * size[0]
+    center_y = size[1] / 2 + offset[1] * size[1]
     transform = (
-        inverse,
-        0,
-        rgba.width / 2 - (size[0] / 2 + offset[0] * size[0]) * inverse,
-        0,
-        inverse,
-        rgba.height / 2 - (size[1] / 2 + offset[1] * size[1]) * inverse,
+        cosine,
+        sine,
+        rgba.width / 2 - center_x * cosine - center_y * sine,
+        -sine,
+        cosine,
+        rgba.height / 2 + center_x * sine - center_y * cosine,
     )
     framed = rgba.transform(
         size,

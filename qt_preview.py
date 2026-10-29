@@ -1,8 +1,10 @@
 """Paint cached portraits through Qt transforms; resize never resamples full sources."""
 
+import math
+
 from PIL import Image, ImageOps
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
-from PySide6.QtGui import QImage, QPainter, QColor
+from PySide6.QtGui import QImage, QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget
 
 from portrait import frame_portrait, MIN_BRIGHTNESS, MAX_BRIGHTNESS
@@ -45,6 +47,7 @@ class PhotoPreview(QWidget):
         self.framing = framing
         self.cutout = None
         self.zoom, self.offset, self.brightness = 1.0, (0.0, 0.0), 1.0
+        self.rotation = 0.0
         self.display = QImage()
         self.prepare_count = 0
         self._generation = 0
@@ -64,6 +67,7 @@ class PhotoPreview(QWidget):
         self.display = QImage()
         if reset:
             self.zoom, self.offset, self.brightness = 1.0, (0.0, 0.0), 1.0
+            self.rotation = 0.0
         self._request()
         self.framing_changed.emit()
         self.update()
@@ -113,8 +117,12 @@ class PhotoPreview(QWidget):
 
         self.jobs.submit(prepare, ready)
 
-    def set_framing(self, *, zoom=None, offset=None, brightness=None):
+    def set_framing(self, *, zoom=None, offset=None, brightness=None, rotation=None):
         """Clamp interactive adjustments and avoid rerendering pixels for pan or zoom."""
+        if rotation is not None:
+            if not math.isfinite(rotation):
+                raise ValueError("Invalid portrait rotation")
+            self.rotation = max(-30.0, min(30.0, float(rotation)))
         if zoom is not None:
             self.zoom = max(1.0, min(8.0, float(zoom)))
         if offset is not None:
@@ -138,8 +146,8 @@ class PhotoPreview(QWidget):
         self.update()
 
     def reset(self):
-        """Reset crop and lighting while preserving all applied alpha corrections."""
-        self.set_framing(zoom=1, offset=(0.0, 0.0), brightness=1)
+        """Reset crop, rotation and lighting while preserving applied alpha corrections."""
+        self.set_framing(zoom=1, offset=(0.0, 0.0), brightness=1, rotation=0)
 
     def frame_rect(self):
         """Locate the centered square print frame within the available widget area."""
@@ -182,10 +190,16 @@ class PhotoPreview(QWidget):
         center = frame.center() + QPointF(
             self.offset[0] * frame.width(), self.offset[1] * frame.height()
         )
-        painter.drawImage(
-            QRectF(center.x() - width / 2, center.y() - height / 2, width, height),
-            self.display,
-        )
+        painter.save()
+        painter.translate(center)
+        painter.rotate(self.rotation)
+        painter.drawImage(QRectF(-width / 2, -height / 2, width, height), self.display)
+        painter.restore()
+        if self.framing and self.rotation != 0:
+            # A level reference belongs only to the preview, never the saved photo.
+            y = frame.top() + frame.height() * 0.38
+            painter.setPen(QPen(QColor("#2479bb"), 1, Qt.PenStyle.DashLine))
+            painter.drawLine(QPointF(frame.left(), y), QPointF(frame.right(), y))
 
     def mousePressEvent(self, event):
         """Start crop panning without mutating any image pixels."""
@@ -229,5 +243,9 @@ class PhotoPreview(QWidget):
         if self.cutout is None:
             raise ValueError("Remove a background before saving")
         return frame_portrait(
-            self.cutout, self.zoom, self.offset, brightness=self.brightness
+            self.cutout,
+            self.zoom,
+            self.offset,
+            brightness=self.brightness,
+            rotation=self.rotation,
         )

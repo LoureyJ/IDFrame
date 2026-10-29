@@ -182,6 +182,16 @@ class PortraitApp(QMainWindow):
         self.zoom_slider, self.zoom_label = self._slider(
             controls, "Framing · Zoom", 100, 800
         )
+        self.rotation_slider, self.rotation_label = self._slider(
+            controls, "Framing · Rotation", -300, 300, initial=0
+        )
+        self.rotation_label.setText("0.0°")
+        self.rotation_slider.setToolTip(
+            "Straighten tilt: −30° to +30°. Positive angles turn clockwise."
+        )
+        self.rotation_slider.valueChanged.connect(
+            lambda value: self.crop.set_framing(rotation=value / 10)
+        )
         self.brightness_slider, self.brightness_label = self._slider(
             controls, "Lighting · Brightness", 25, 200
         )
@@ -195,7 +205,8 @@ class PortraitApp(QMainWindow):
         self.reset_button.clicked.connect(self.crop.reset)
         controls.addWidget(self.reset_button)
         help_text = QLabel(
-            "Drag the preview to position.\nBrightness: 100% is neutral."
+            "Drag the preview to position.\nRotation: level the eyes with the guide."
+            "\nBrightness: 100% is neutral."
         )
         help_text.setWordWrap(True)
         controls.addWidget(help_text)
@@ -229,13 +240,13 @@ class PortraitApp(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         return frame, layout
 
-    def _slider(self, layout, title, minimum, maximum):
+    def _slider(self, layout, title, minimum, maximum, *, initial=100):
         """Create an accessible adjustment slider with a percentage readout."""
         layout.addWidget(QLabel(title))
         row = QHBoxLayout()
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(minimum, maximum)
-        slider.setValue(100)
+        slider.setValue(initial)
         slider.setAccessibleName(title)
         label = QLabel("100%")
         label.setMinimumWidth(42)
@@ -254,6 +265,10 @@ class PortraitApp(QMainWindow):
             slider.setValue(round(value * 100))
             slider.blockSignals(False)
             label.setText(f"{value:.0%}")
+        self.rotation_slider.blockSignals(True)
+        self.rotation_slider.setValue(round(self.crop.rotation * 10))
+        self.rotation_slider.blockSignals(False)
+        self.rotation_label.setText(f"{self.crop.rotation:.1f}°")
 
     def change_theme(self, name):
         """Change appearance without rebuilding the document or prepared image pixels."""
@@ -274,6 +289,7 @@ class PortraitApp(QMainWindow):
             self.edit_button,
             self.save_button,
             self.zoom_slider,
+            self.rotation_slider,
             self.brightness_slider,
             self.reset_button,
             self.crop,
@@ -487,16 +503,19 @@ class PortraitApp(QMainWindow):
             )
             return
         self.person_name = name
-        cutout, zoom, offset, brightness = (
+        cutout, zoom, offset, brightness, rotation = (
             self.crop.cutout,
             self.crop.zoom,
             self.crop.offset,
             self.crop.brightness,
+            self.crop.rotation,
         )
 
         def export():
             """Claim a destination exclusively so another process cannot cause overwrite."""
-            image = frame_portrait(cutout, zoom, offset, brightness=brightness)
+            image = frame_portrait(
+                cutout, zoom, offset, brightness=brightness, rotation=rotation
+            )
             while True:
                 target = available_photo_path(destination)
                 try:
