@@ -49,7 +49,7 @@ def apply_theme(name):
         QRadioButton::indicator:checked {{ background: {colors['accent']}; border-color: {colors['accent']}; }}
         QSlider::groove:horizontal {{ height: 4px; background: {colors['border']}; border-radius: 2px; }}
         QSlider::handle:horizontal {{ width: 16px; margin: -6px 0; border-radius: 8px; background: {colors['accent']}; }}
-        QLineEdit, QListWidget, QTextBrowser {{ background: {colors['card']}; border: 1px solid {colors['border']}; border-radius: 8px; padding: 6px; }}
+        QLineEdit, QComboBox, QListWidget, QTextBrowser {{ background: {colors['card']}; border: 1px solid {colors['border']}; border-radius: 8px; padding: 6px; }}
         QScrollArea {{ border: none; background: transparent; }}
         QProgressBar {{ border: none; border-radius: 3px; background: {colors['field']}; max-height: 6px; }}
         QProgressBar::chunk {{ background: {colors['accent']}; border-radius: 3px; }}

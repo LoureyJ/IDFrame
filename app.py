@@ -20,12 +20,14 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSlider,
+    QComboBox,
     QProgressBar,
     QFileDialog,
     QMessageBox,
 )
 
 from app_version import VERSION
+from photo_sizes import PHOTO_SIZES
 from alignment import OfflineAligner
 from portrait import (
     PortraitRemover,
@@ -55,6 +57,7 @@ class PortraitApp(QMainWindow):
         self.theme = load_theme(preferences_path)
         self.photo = self.result = self.path = None
         self.person_name = ""
+        self.size_key = "2x2"
         self.busy, self.generation = False, 0
         self._close_timer_pending = False
         self.editor = self.changelog_window = None
@@ -157,6 +160,8 @@ class PortraitApp(QMainWindow):
         for text, preview in (("Original", self.before), ("2 × 2 Preview", self.crop)):
             card, layout = self._card()
             label = QLabel(text)
+            if preview is self.crop:
+                self.preview_title = label
             label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
             layout.addWidget(label)
             layout.addWidget(preview, 1)
@@ -169,6 +174,16 @@ class PortraitApp(QMainWindow):
         controls = QVBoxLayout(body)
         controls.setContentsMargins(0, 0, 5, 0)
         controls.setSpacing(8)
+        controls.addWidget(QLabel("Photo size"))
+        self.size_combo = QComboBox()
+        self.size_combo.setAccessibleName("Photo size")
+        self.size_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.size_combo.setMinimumContentsLength(12)
+        for key, preset in PHOTO_SIZES.items():
+            self.size_combo.addItem(preset.label, key)
+        controls.addWidget(self.size_combo)
         controls.addWidget(QLabel("Removal mode"))
         self.mode_group, self.mode_buttons = QButtonGroup(self), []
         for name, description in zip(
@@ -232,9 +247,9 @@ class PortraitApp(QMainWindow):
         layout.addWidget(self.save_button)
         workspace.addWidget(inspector)
         page.addLayout(workspace, 1)
-        page.addWidget(
-            QLabel("2 × 2 inches · 1200 × 1200 pixels · 600 DPI · White PNG")
-        )
+        self.export_label = QLabel(PHOTO_SIZES[self.size_key].description)
+        self.export_label.setWordWrap(True)
+        page.addWidget(self.export_label)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         page.addWidget(self.progress)
@@ -244,6 +259,17 @@ class PortraitApp(QMainWindow):
         self.status_label.setWordWrap(True)
         page.addWidget(self.status_label)
         self.crop.framing_changed.connect(self._sync_adjustments)
+        self.size_combo.currentIndexChanged.connect(self.change_photo_size)
+
+    def change_photo_size(self, index):
+        """Update preview geometry and export labels without touching source or edits."""
+        self.size_key = self.size_combo.itemData(index)
+        preset = PHOTO_SIZES[self.size_key]
+        self.crop.output_size = preset.pixels
+        self.crop.update()
+        self.preview_title.setText(f"{preset.short_label} Preview")
+        self.save_button.setText(f"Save {preset.short_label} Photo")
+        self.export_label.setText(preset.description)
 
     def _card(self):
         """Create a themed card and its independently managed layout."""
@@ -298,6 +324,7 @@ class PortraitApp(QMainWindow):
         for button in (self.open_button, self.paste_button, *self.mode_buttons):
             button.setEnabled(not busy)
         self.remove_button.setEnabled(not busy and self.photo is not None)
+        self.size_combo.setEnabled(not busy)
         for control in (
             self.edit_button,
             self.auto_skew_button,
@@ -455,7 +482,7 @@ class PortraitApp(QMainWindow):
                 + " · "
             )
         self.status_label.setText(
-            prefix + "Ready — Edit artifacts, adjust framing, or save your 2 × 2 photo."
+            prefix + "Ready — Edit artifacts, adjust framing, or save your portrait."
         )
 
     def auto_skew(self):
@@ -513,17 +540,19 @@ class PortraitApp(QMainWindow):
         """Choose a safe name and export original-resolution pixels on a worker."""
         if self.busy or self.crop.cutout is None:
             return
-        name = ask_person_name(self, self.person_name)
+        size_key = self.size_key
+        preset = PHOTO_SIZES[size_key]
+        name = ask_person_name(self, self.person_name, size_key=size_key)
         if name is None:
             return
         try:
-            filename = portrait_filename(name)
+            filename = portrait_filename(name, size_key)
         except ValueError as error:
             QMessageBox.warning(self, "Invalid name", str(error))
             return
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save 2 × 2 portrait",
+            f"Save {preset.short_label} portrait",
             filename,
             "PNG image (*.png)",
             options=QFileDialog.Option.DontConfirmOverwrite,
@@ -552,12 +581,17 @@ class PortraitApp(QMainWindow):
         def export():
             """Claim a destination exclusively so another process cannot cause overwrite."""
             image = frame_portrait(
-                cutout, zoom, offset, brightness=brightness, rotation=rotation
+                cutout,
+                zoom,
+                offset,
+                size=preset.pixels,
+                brightness=brightness,
+                rotation=rotation,
             )
             while True:
                 target = available_photo_path(destination)
                 try:
-                    save_portrait(image, target, overwrite=False)
+                    save_portrait(image, target, overwrite=False, size=preset.pixels)
                     return target
                 except FileExistsError:
                     continue
@@ -565,7 +599,7 @@ class PortraitApp(QMainWindow):
         self._work(
             export,
             lambda target: self.status_label.setText(
-                f"Saved {target.name} — 1200 × 1200 pixels · 600 DPI · White PNG"
+                f"Saved {target.name} — {preset.description}"
             ),
             "Saving portrait…",
         )

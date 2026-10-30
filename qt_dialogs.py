@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from photo_naming import portrait_filename
 
 
-def ask_person_name(parent, initial=""):
+def ask_person_name(parent, initial="", *, size_key="2x2"):
     """Ask for a validated person name with a live export-filename preview."""
     dialog = QDialog(parent)
     dialog.setWindowTitle("Name this portrait")
@@ -40,7 +40,7 @@ def ask_person_name(parent, initial=""):
     def validate():
         """Preview the safe filename and prevent accepting an invalid name."""
         try:
-            filename = portrait_filename(entry.text())
+            filename = portrait_filename(entry.text(), size_key)
         except ValueError as error:
             preview.setText(str(error))
             buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)

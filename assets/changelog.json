@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.24",
+    "changes": [
+      "Added a Photo size selector: 2×2 inches (default), 1×1 inch, and Philippine passport 35×45 mm. All formats retain white backgrounds and 600 DPI PNG exports.",
+      "Preview proportions, save labels and person-based filenames follow the selected size. Outputs are 1200×1200, 600×600 and 827×1063 pixels respectively. Size changes preserve framing, rotation, brightness and cleanup edits."
+    ]
+  },
+  {
     "version": "1.1.23",
     "changes": [
       "Expanded manual rotation to −180° through +180° for sideways and upside-down photos, retaining precise 0.1° adjustments.",

@@ -38,6 +38,15 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
+Choose **Photo size** in the editing panel: **2×2 inches** (1200×1200 pixels),
+**1×1 inch** (600×600 pixels), or **Philippine passport · 35×45 mm** (827×1063
+pixels). All presets save white RGB PNGs at 600 DPI. The app starts with 2×2;
+your choice stays selected for subsequent photos during that session. Changing
+size preserves framing, rotation, brightness and cleanup edits. The preview,
+save labels and person-based filename suffix follow the selected format.
+The passport option is a print-size preset, not a guarantee of application
+acceptance; the DFA normally captures passport photos onsite.
+
 Use **Rotation** beside Zoom to straighten a tilted portrait manually, from −180°
 to +180° in 0.1° steps. Positive angles turn clockwise. A horizontal guide appears
 in the 2×2 preview when the angle is nonzero; it is never included in saved photos.

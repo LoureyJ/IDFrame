@@ -5,10 +5,13 @@ import re
 import tkinter as tk
 from tkinter import ttk
 from ui_theme import palette_for, style_plain_widgets
+from photo_sizes import PHOTO_SIZES
 
 
-def portrait_filename(person_name):
-    """Validate a person's name and produce a portable PersonName_2x2.png filename."""
+def portrait_filename(person_name, size_key="2x2"):
+    """Validate a name and append the selected print preset's safe filename suffix."""
+    if size_key not in PHOTO_SIZES:
+        raise ValueError("Choose a supported photo size.")
     name = "_".join(person_name.split()).strip("._ ")
     if not name:
         raise ValueError("Enter the person's name.")
@@ -26,7 +29,7 @@ def portrait_filename(person_name):
         *[f"{prefix}{n}" for prefix in ("COM", "LPT") for n in range(1, 10)],
     }:
         name = "Photo_" + name
-    return name + "_2x2.png"
+    return name + "_" + PHOTO_SIZES[size_key].suffix + ".png"
 
 
 def available_photo_path(path):

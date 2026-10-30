@@ -8,6 +8,7 @@ from PySide6.QtGui import QImage, QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget
 
 from portrait import frame_portrait, MIN_BRIGHTNESS, MAX_BRIGHTNESS
+from photo_sizes import PHOTO_SIZES
 
 
 def image_to_qt(image):
@@ -48,6 +49,7 @@ class PhotoPreview(QWidget):
         self.cutout = None
         self.zoom, self.offset, self.brightness = 1.0, (0.0, 0.0), 1.0
         self.rotation = 0.0
+        self.output_size = PHOTO_SIZES["2x2"].pixels
         self.display = QImage()
         self.prepare_count = 0
         self._generation = 0
@@ -128,10 +130,16 @@ class PhotoPreview(QWidget):
         if offset is not None:
             self.offset = tuple(float(value) for value in offset)
         if self.cutout is not None:
-            maximum = max(self.cutout.size)
+            scale = (
+                min(
+                    self.output_size[0] / self.cutout.width,
+                    self.output_size[1] / self.cutout.height,
+                )
+                * self.zoom
+            )
             limits = tuple(
-                (1 + self.zoom * dimension / maximum) / 2 - 0.02
-                for dimension in self.cutout.size
+                (1 + scale * dimension / output) / 2 - 0.02
+                for dimension, output in zip(self.cutout.size, self.output_size)
             )
             self.offset = tuple(
                 max(-limit, min(limit, value))
@@ -150,9 +158,15 @@ class PhotoPreview(QWidget):
         self.set_framing(zoom=1, offset=(0.0, 0.0), brightness=1, rotation=0)
 
     def frame_rect(self):
-        """Locate the centered square print frame within the available widget area."""
-        side = max(1, min(self.width(), self.height()) - 16)
-        return QRectF((self.width() - side) / 2, (self.height() - side) / 2, side, side)
+        """Fit the selected print aspect ratio inside the available widget area."""
+        scale = min(
+            max(1, self.width() - 16) / self.output_size[0],
+            max(1, self.height() - 16) / self.output_size[1],
+        )
+        width, height = (dimension * scale for dimension in self.output_size)
+        return QRectF(
+            (self.width() - width) / 2, (self.height() - height) / 2, width, height
+        )
 
     def paintEvent(self, event):
         """Draw cached pixels with native Qt scaling and no full-source conversion."""
@@ -165,7 +179,7 @@ class PhotoPreview(QWidget):
                 self.rect(),
                 Qt.AlignmentFlag.AlignCenter,
                 (
-                    "Your 2 × 2 portrait will appear here"
+                    "Your portrait will appear here"
                     if self.framing
                     else "Open or paste a portrait photo"
                 ),
@@ -216,9 +230,12 @@ class PhotoPreview(QWidget):
         if self._drag is not None:
             start, offset = self._drag
             delta = event.position() - start
-            side = self.frame_rect().width()
+            frame = self.frame_rect()
             self.set_framing(
-                offset=(offset[0] + delta.x() / side, offset[1] + delta.y() / side)
+                offset=(
+                    offset[0] + delta.x() / frame.width(),
+                    offset[1] + delta.y() / frame.height(),
+                )
             )
 
     def mouseReleaseEvent(self, event):
@@ -246,6 +263,7 @@ class PhotoPreview(QWidget):
             self.cutout,
             self.zoom,
             self.offset,
+            size=self.output_size,
             brightness=self.brightness,
             rotation=self.rotation,
         )

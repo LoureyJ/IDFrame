@@ -7,14 +7,15 @@ import tempfile
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
+from photo_sizes import PHOTO_SIZES, DPI
 
 ROOT = Path(__file__).resolve().parent
 LEGACY_MODEL_PATH = ROOT / "models" / "u2net_human_seg.onnx"
 HAIR_MODEL_PATH = ROOT / "models" / "portrait_hair.onnx"
 MODEL_PATH = LEGACY_MODEL_PATH if LEGACY_MODEL_PATH.is_file() else HAIR_MODEL_PATH
-OUTPUT_MM = (50.8, 50.8)
-OUTPUT_DPI = (600, 600)
-OUTPUT_SIZE = tuple(round(mm / 25.4 * dpi) for mm, dpi in zip(OUTPUT_MM, OUTPUT_DPI))
+OUTPUT_MM = PHOTO_SIZES["2x2"].mm
+OUTPUT_DPI = DPI
+OUTPUT_SIZE = PHOTO_SIZES["2x2"].pixels
 
 # Keep model-specific dimensions and normalization next to the export contract.
 SEGMENTATION_SIZE = (320, 320)
@@ -235,16 +236,16 @@ class AutomaticPortraitRemover:
         return protected if self.last_mode == "protected" else fine_hair
 
 
-def format_portrait(cutout):
-    """Fit the original framing into a white 2 × 2 inch square without stretching."""
+def format_portrait(cutout, size=OUTPUT_SIZE):
+    """Fit the original framing into a selected white print size without stretching."""
     rgba = cutout.convert("RGBA")
     if rgba.getchannel("A").getbbox() is None:
         raise ValueError("No person detected. Try another portrait photo.")
-    scaled = ImageOps.contain(rgba, OUTPUT_SIZE, Image.Resampling.LANCZOS)
-    canvas = Image.new("RGBA", OUTPUT_SIZE, "white")
+    scaled = ImageOps.contain(rgba, size, Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", size, "white")
     canvas.alpha_composite(
         scaled,
-        ((OUTPUT_SIZE[0] - scaled.width) // 2, (OUTPUT_SIZE[1] - scaled.height) // 2),
+        ((size[0] - scaled.width) // 2, (size[1] - scaled.height) // 2),
     )
     return canvas.convert("RGB")
 
@@ -314,9 +315,9 @@ def frame_portrait(
     return Image.alpha_composite(canvas, framed).convert("RGB")
 
 
-def save_portrait(image, path, *, overwrite=True):
+def save_portrait(image, path, *, overwrite=True, size=OUTPUT_SIZE):
     """Enforce the export contract even if called outside the desktop UI."""
-    result = format_portrait(image)
+    result = format_portrait(image, size)
     path = Path(path)
     # An interrupted save never damages an existing output file.
     handle, temporary = tempfile.mkstemp(suffix=".png", dir=path.parent)
