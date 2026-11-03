@@ -38,6 +38,23 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
+Use **Camera** beside Open Photo to choose a built-in or USB camera by its
+Windows device name, see a live viewfinder, and select **Capture Photo**. The
+captured frame loads as a new original photo; continue with Remove Background,
+Edit and Save. Cancel leaves the existing photo untouched. The device is
+released on capture, cancellation or switching cameras. Connecting/disconnecting
+a USB camera refreshes the list automatically; the last selected device is
+remembered for the current app session. Captures stay in memory until you save.
+
+Camera support uses Qt Multimedia and the system's camera drivers. Standard
+Windows-compatible webcams are supported; proprietary cameras require a driver
+that exposes them as a Windows camera device. Image resolution comes from the
+camera's negotiated video stream, not the resized preview widget. If a camera
+is unavailable, close other camera apps, check its lens cover, and allow desktop
+camera access in Windows Privacy settings. Qt Multimedia must be included in
+the updated frozen runtime for installed clients; source setup installs the
+matching PySide6-Addons package. Camera access begins only when Camera is opened.
+
 Choose **Photo size** in the editing panel: **2×2 inches** (1200×1200 pixels),
 **1×1 inch** (600×600 pixels), or **Philippine passport · 35×45 mm** (827×1063
 pixels). All presets save white RGB PNGs at 600 DPI. The app starts with 2×2;
@@ -53,8 +70,8 @@ in the 2×2 preview when the angle is nonzero; it is never included in saved pho
 Rotation preserves crop, brightness and cleanup edits. **Reset Adjustments** also
 returns rotation to 0°. Opening another photo starts with no rotation.
 
-The top row is **Open Photo · Paste Ctrl+V · Auto-skew · Edit**, using blue, teal,
-gold and purple to identify each action. After background removal, **Auto-skew**
+The top row is **Open Photo · Camera · Paste Ctrl+V · Auto-skew · Edit**, using
+blue, cyan, teal, gold and purple to identify each action. After background removal, **Auto-skew**
 estimates a reversible rotation using a bundled offline face detector, including
 sideways/upside-down orientations. It runs only when clicked. Check its result
 against the eye guide and adjust Rotation manually: the estimate can be inaccurate,

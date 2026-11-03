@@ -30,6 +30,8 @@ class RuntimeTests(unittest.TestCase):
             report = json.loads(output.with_suffix(".json").read_text())
             self.assertEqual(report["ui"], "PySide6")
             self.assertEqual(report["editor"], "passed")
+            self.assertEqual(report["camera_preview"], "passed")
+            self.assertIsInstance(report["camera_devices"], list)
             self.assertEqual(report["size"], [1200, 1200])
             self.assertEqual(report["mode"], "RGB")
             self.assertEqual(report["corner"], [255, 255, 255])

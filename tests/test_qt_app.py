@@ -154,6 +154,8 @@ class QtAppTests(unittest.TestCase):
             for button in (
                 window.save_button,
                 window.open_button,
+                window.camera_button,
+                window.auto_skew_button,
                 window.paste_button,
                 window.edit_button,
                 *window.theme_buttons.values(),

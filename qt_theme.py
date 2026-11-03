@@ -38,6 +38,7 @@ def apply_theme(name):
         QPushButton[accent="true"]:disabled {{ background: {colors['disabled']}; color: {colors['disabled_text']}; }}
         QPushButton:checked {{ background: {colors['selection']}; border-color: {colors['accent']}; }}
         QPushButton[actionColor="blue"] {{ background: #1658c7; color: white; border-color: #1658c7; }}
+        QPushButton[actionColor="cyan"] {{ background: #0d637b; color: white; border-color: #0d637b; }}
         QPushButton[actionColor="teal"] {{ background: #087b72; color: white; border-color: #087b72; }}
         QPushButton[actionColor="gold"] {{ background: #f0c351; color: #252015; border-color: #b58a23; }}
         QPushButton[actionColor="purple"] {{ background: #7544b4; color: white; border-color: #7544b4; }}

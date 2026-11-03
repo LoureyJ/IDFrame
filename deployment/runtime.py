@@ -19,6 +19,8 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--smoke-test":
         from PySide6.QtWidgets import QApplication
         from PySide6.QtCore import QPointF
+        from PySide6.QtMultimedia import QMediaDevices, QMediaCaptureSession
+        from PySide6.QtMultimediaWidgets import QVideoWidget
         import onnxruntime
         from PIL import Image, ImageDraw
         from portrait import PortraitRemover, save_portrait
@@ -32,6 +34,12 @@ def main():
         output = Path(sys.argv[2])
         save_portrait(PortraitRemover().remove(image), output)
         application = QApplication.instance() or QApplication([])
+        viewfinder = QVideoWidget()
+        capture_session = QMediaCaptureSession()
+        capture_session.setVideoOutput(viewfinder)
+        camera_devices = [
+            device.description() for device in QMediaDevices.videoInputs()
+        ]
         window = PortraitApp(sync_shortcuts=False)
         editor = CleanupEditor(Image.new("RGBA", (100, 100), "red"), window)
         editor.view.erase_at(QPointF(50, 50), QPointF(50, 50), source_coordinates=True)
@@ -53,6 +61,8 @@ def main():
                 "title": title,
                 "ui": "PySide6",
                 "editor": "passed",
+                "camera_preview": "passed",
+                "camera_devices": camera_devices,
             }
         output.with_suffix(".json").write_text(json.dumps(report))
         return

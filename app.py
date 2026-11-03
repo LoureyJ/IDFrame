@@ -10,6 +10,7 @@ from PySide6.QtGui import QIcon, QFont, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
+    QDialog,
     QWidget,
     QFrame,
     QVBoxLayout,
@@ -58,6 +59,7 @@ class PortraitApp(QMainWindow):
         self.photo = self.result = self.path = None
         self.person_name = ""
         self.size_key = "2x2"
+        self.camera_device_id = None
         self.busy, self.generation = False, 0
         self._close_timer_pending = False
         self.editor = self.changelog_window = None
@@ -130,6 +132,8 @@ class PortraitApp(QMainWindow):
         toolbar = QHBoxLayout()
         self.open_button = QPushButton("Open Photo")
         self.open_button.clicked.connect(self.open_photo)
+        self.camera_button = QPushButton("Camera")
+        self.camera_button.clicked.connect(self.open_camera)
         self.paste_button = QPushButton("Paste · Ctrl+V")
         self.paste_button.clicked.connect(self.paste_photo)
         self.auto_skew_button = QPushButton("Auto-skew")
@@ -141,6 +145,7 @@ class PortraitApp(QMainWindow):
         self.edit_button.clicked.connect(self.open_editor)
         for button, color in (
             (self.open_button, "blue"),
+            (self.camera_button, "cyan"),
             (self.paste_button, "teal"),
             (self.auto_skew_button, "gold"),
             (self.edit_button, "purple"),
@@ -150,6 +155,7 @@ class PortraitApp(QMainWindow):
         toolbar.addStretch()
         privacy = QLabel("Your photos stay on this computer")
         privacy.setWordWrap(True)
+        privacy.setVisible(not compact)
         toolbar.addWidget(privacy)
         page.addLayout(toolbar)
         workspace = QHBoxLayout()
@@ -321,7 +327,12 @@ class PortraitApp(QMainWindow):
         """Keep controls consistent until a background result has been consumed."""
         self.busy = busy
         ready = self.crop.cutout is not None
-        for button in (self.open_button, self.paste_button, *self.mode_buttons):
+        for button in (
+            self.open_button,
+            self.camera_button,
+            self.paste_button,
+            *self.mode_buttons,
+        ):
             button.setEnabled(not busy)
         self.remove_button.setEnabled(not busy and self.photo is not None)
         self.size_combo.setEnabled(not busy)
@@ -373,6 +384,30 @@ class PortraitApp(QMainWindow):
         self.result = cutout
         self.crop.set_image(cutout)
         self._set_busy(False)
+
+    def open_camera(self):
+        """Open camera selection on demand and replace the source only after Capture."""
+        if self.busy:
+            return
+        try:
+            from camera_dialog import CameraDialog
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "Camera support unavailable",
+                "Install the latest IDFrame runtime, or run setup.bat in the source project.",
+            )
+            return
+        dialog = CameraDialog(self, selected_device_id=self.camera_device_id)
+        result = dialog.exec()
+        self.camera_device_id = dialog.selected_device_id
+        if result == QDialog.DialogCode.Accepted and dialog.photo is not None:
+            self.set_photo(
+                dialog.photo,
+                None,
+                "Camera photo captured — ready for background removal",
+            )
+        dialog.deleteLater()
 
     def open_photo(self):
         """Choose a source and load/orient its pixels outside the GUI thread."""
