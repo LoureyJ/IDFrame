@@ -117,6 +117,28 @@ class AmbientBackgroundTests(unittest.TestCase):
         fixtures.wait_until(lambda: not self.window.busy)
         self.assertTrue(self.window.background.frame_timer.isActive())
 
+    def test_processing_effects_replace_idle_bloom_and_render_in_both_themes(self):
+        """Actions remain visible and visually distinct even after fast completion."""
+        canvas = self.window.background
+        for theme in ("Light", "Dark"):
+            with self.subTest(theme=theme):
+                self.window.change_theme(theme)
+                canvas.set_paused(True)
+                baseline = np.array(qt_to_image(canvas.grab().toImage()), dtype=int)
+                canvas.set_paused(False)
+                self.assertTrue(canvas.start_bloom())
+                frames = []
+                for action in ("paste", "remove", "save"):
+                    with patch("ambient_background.time.monotonic", return_value=100):
+                        canvas.set_processing(True, action)
+                        canvas.set_processing(False)
+                    with patch("ambient_background.time.monotonic", return_value=101.2):
+                        frame = np.array(qt_to_image(canvas.grab().toImage()), dtype=int)
+                    for reference in (baseline, *frames):
+                        changed = np.abs(frame - reference)[:, :, :3].max(axis=2) >= 25
+                        self.assertGreater(np.count_nonzero(changed), 0.01 * changed.size)
+                    frames.append(frame)
+
 
 if __name__ == "__main__":
     unittest.main()

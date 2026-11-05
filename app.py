@@ -339,10 +339,10 @@ class PortraitApp(QMainWindow):
             self.theme_buttons[name].setChecked(True)
             save_theme(name, self.preferences_path)
 
-    def _set_busy(self, busy):
+    def _set_busy(self, busy, *, action=None):
         """Keep controls consistent until a background result has been consumed."""
         self.busy = busy
-        self.background.set_processing(busy)
+        self.background.set_processing(busy, action)
         ready = self.crop.cutout is not None
         for button in (
             self.open_button,
@@ -368,10 +368,10 @@ class PortraitApp(QMainWindow):
         self.progress.setRange(0, 0 if busy else 1)
         self.progress.setValue(0)
 
-    def _work(self, work, accept, description):
+    def _work(self, work, accept, description, *, action=None):
         """Run a document operation and reject callbacks for a replaced source."""
         generation = self.generation
-        self._set_busy(True)
+        self._set_busy(True, action=action)
         self.status_label.setText(description)
 
         def completed(value, error):
@@ -475,6 +475,7 @@ class PortraitApp(QMainWindow):
                         photo, None, "Pasted photo from clipboard"
                     ),
                     "Loading clipboard photo…",
+                    action="paste",
                 )
                 return
         if mime is not None and mime.hasUrls():
@@ -495,6 +496,7 @@ class PortraitApp(QMainWindow):
                 load_first,
                 lambda pair: self.set_photo(*pair, "Pasted photo file"),
                 "Loading clipboard file…",
+                action="paste",
             )
             return
         QMessageBox.information(
@@ -521,6 +523,7 @@ class PortraitApp(QMainWindow):
             lambda: self.process(photo, mode),
             lambda image: self.accept_removal(generation, image, None),
             "Removing background locally…",
+            action="remove",
         )
 
     def accept_removal(self, generation, cutout, error):
@@ -661,6 +664,7 @@ class PortraitApp(QMainWindow):
                 f"Saved {target.name} — {preset.description}"
             ),
             "Saving portrait…",
+            action="save",
         )
 
     def closeEvent(self, event):

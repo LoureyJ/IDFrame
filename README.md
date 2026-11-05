@@ -42,7 +42,8 @@ The app background shows blue, cyan, violet and gold gradient blooms across the
 workspace in both Light and Dark modes. After 10 seconds of inactivity, a randomly
 styled bloom starts every 10 seconds. Interactions can also trigger a bloom,
 and blooms start when processing begins and repeat every 5 seconds during longer
-jobs. Each bloom drifts and fades over 3–5 seconds. Animation stops while the
+jobs. Paste expands a cyan glow, Remove Background sweeps violet across the
+window, and Save draws gold toward the lower right. Animation stops while the
 workspace is hidden or minimized. The blooms are part of the workspace only.
 
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its

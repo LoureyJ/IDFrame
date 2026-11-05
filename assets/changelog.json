@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.30",
+    "changes": [
+      "Added distinct processing gradients for pasting photos, removing backgrounds, and saving photos in Light and Dark modes."
+    ]
+  },
+  {
     "version": "1.1.29",
     "changes": [
       "Made gradient bursts brighter and wider in Light and Dark modes. Bursts now start at random locations across the workspace."
