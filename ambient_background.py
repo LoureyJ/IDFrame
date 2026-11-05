@@ -204,6 +204,8 @@ class AmbientBackground(QWidget):
             QEvent.Type.KeyPress,
             QEvent.Type.Wheel,
         ):
+            if watched.property("preserveAmbient"):
+                return super().eventFilter(watched, event)
             self.idle_timer.start(self.IDLE_MS)
             now = time.monotonic()
             if now - self._last_interaction_bloom >= 5 and self.start_bloom():

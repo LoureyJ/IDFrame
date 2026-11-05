@@ -117,6 +117,33 @@ class AmbientBackgroundTests(unittest.TestCase):
         fixtures.wait_until(lambda: not self.window.busy)
         self.assertTrue(self.window.background.frame_timer.isActive())
 
+    def test_mode_selection_preserves_idle_countdown_and_active_bloom(self):
+        """Selecting a radio button can reprocess the photo without resetting gradients."""
+        window = self.window
+        canvas = window.background
+        window.set_photo(Image.new("RGB", (64, 64)))
+        canvas.idle_timer.setInterval(9000)
+        QTest.keyClick(window.mode_buttons[1], Qt.Key.Key_Space)
+        self.assertEqual(window.removal_mode, "Protect person")
+        self.assertEqual(canvas.idle_timer.interval(), 9000)
+        self.assertFalse(canvas.frame_timer.isActive())
+
+        cutout = Image.new("RGBA", (64, 64), "red")
+        window.set_cutout(cutout)
+        self.assertTrue(canvas.start_bloom("paste"))
+        started = canvas._started
+        with patch.object(window, "process", return_value=cutout) as process:
+            QTest.keyClick(window.mode_buttons[2], Qt.Key.Key_Space)
+            fixtures.wait_until(lambda: not window.busy)
+            process.assert_called_once_with(window.photo, "Fine hair")
+        self.assertEqual(canvas._started, started)
+        self.assertEqual(canvas.idle_timer.interval(), 9000)
+
+        with patch.object(window, "process", return_value=cutout):
+            QTest.mouseClick(window.remove_button, Qt.MouseButton.LeftButton)
+            self.assertEqual(canvas._bloom_action, canvas.ACTION_BLOOMS["remove"])
+            fixtures.wait_until(lambda: not window.busy)
+
     def test_processing_effects_replace_idle_bloom_and_render_in_both_themes(self):
         """Actions remain visible and visually distinct even after fast completion."""
         canvas = self.window.background

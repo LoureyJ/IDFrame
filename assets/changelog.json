@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.31",
+    "changes": [
+      "Switching removal modes now preserves the current gradient animation and idle countdown while the photo reprocesses."
+    ]
+  },
+  {
     "version": "1.1.30",
     "changes": [
       "Added distinct processing gradients for pasting photos, removing backgrounds, and saving photos in Light and Dark modes."

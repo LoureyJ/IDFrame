@@ -216,6 +216,7 @@ class PortraitApp(QMainWindow):
             ),
         ):
             button = QRadioButton(name + "\n" + description)
+            button.setProperty("preserveAmbient", True)
             button.toggled.connect(
                 lambda checked, value=name: (
                     self.mode_changed(value) if checked else None
@@ -339,10 +340,11 @@ class PortraitApp(QMainWindow):
             self.theme_buttons[name].setChecked(True)
             save_theme(name, self.preferences_path)
 
-    def _set_busy(self, busy, *, action=None):
+    def _set_busy(self, busy, *, action=None, animate=True):
         """Keep controls consistent until a background result has been consumed."""
         self.busy = busy
-        self.background.set_processing(busy, action)
+        if animate:
+            self.background.set_processing(busy, action)
         ready = self.crop.cutout is not None
         for button in (
             self.open_button,
@@ -368,10 +370,10 @@ class PortraitApp(QMainWindow):
         self.progress.setRange(0, 0 if busy else 1)
         self.progress.setValue(0)
 
-    def _work(self, work, accept, description, *, action=None):
+    def _work(self, work, accept, description, *, action=None, animate=True):
         """Run a document operation and reject callbacks for a replaced source."""
         generation = self.generation
-        self._set_busy(True, action=action)
+        self._set_busy(True, action=action, animate=animate)
         self.status_label.setText(description)
 
         def completed(value, error):
@@ -507,13 +509,13 @@ class PortraitApp(QMainWindow):
         """Select a local model and reprocess an existing idle removal result."""
         self.removal_mode = name
         if hasattr(self, "crop") and self.crop.cutout is not None and not self.busy:
-            self.remove()
+            self.remove(animate=False)
 
     def process(self, photo, mode="Auto"):
         """Run the selected local model on a worker without accessing Qt controls."""
         return self.removers[mode].remove(photo)
 
-    def remove(self):
+    def remove(self, *, animate=True):
         """Submit a single inference job while Qt remains available for painting."""
         if self.busy or self.photo is None:
             return
@@ -524,6 +526,7 @@ class PortraitApp(QMainWindow):
             lambda image: self.accept_removal(generation, image, None),
             "Removing background locally…",
             action="remove",
+            animate=animate,
         )
 
     def accept_removal(self, generation, cutout, error):
