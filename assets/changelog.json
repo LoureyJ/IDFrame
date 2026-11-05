@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.28",
+    "changes": [
+      "Made gradient bursts easier to see near the header in Light and Dark modes, with randomized colors and positions every 10 seconds while idle.",
+      "Added gradient feedback for workspace interactions and while processing photos. Longer jobs repeat the effect every 5 seconds."
+    ]
+  },
+  {
     "version": "1.1.27",
     "changes": [
       "Added head-and-shoulders, eye-level, headroom and centerline guides to the photo preview. Toggle Guides or drag the right-edge dots to adjust eye level and headroom without changing photo pixels.",

@@ -342,7 +342,7 @@ class PortraitApp(QMainWindow):
     def _set_busy(self, busy):
         """Keep controls consistent until a background result has been consumed."""
         self.busy = busy
-        self.background.set_paused(busy)
+        self.background.set_processing(busy)
         ready = self.crop.cutout is not None
         for button in (
             self.open_button,

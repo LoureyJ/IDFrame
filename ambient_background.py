@@ -13,6 +13,8 @@ class AmbientBackground(QWidget):
     """Paint lightweight decoration without touching document or preview pixels."""
 
     COLORS = ("#4389ed", "#28becb", "#a17bea", "#e8b554")
+    IDLE_MS = 10000
+    PROCESSING_MS = 5000
 
     def __init__(self, parent=None, *, theme="Light"):
         """Create idle/frame timers; actual animation starts only while visible."""
@@ -21,12 +23,14 @@ class AmbientBackground(QWidget):
         self._theme = theme
         self._random = random.Random()
         self._paused, self._active = False, False
+        self._processing = False
+        self._last_interaction_bloom = float("-inf")
         self._anchor = (0.5, 0.1)
         self._colors = self.COLORS[:3]
         self._duration, self._started = 0.0, 0.0
         self._watched_window = None
         self.idle_timer = QTimer(self)
-        self.idle_timer.setSingleShot(True)
+        self.idle_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.idle_timer.timeout.connect(self.start_bloom)
         self.frame_timer = QTimer(self)
         self.frame_timer.setInterval(50)
@@ -38,12 +42,22 @@ class AmbientBackground(QWidget):
         self.update()
 
     def set_paused(self, paused):
-        """Stop both timers during processing and resume with a fresh idle interval."""
+        """Suspend the effect and resume with a fresh interval."""
         self._paused = bool(paused)
         self._sync_schedule()
 
+    def set_processing(self, processing):
+        """Trigger a bloom at task start and keep it visible through completion."""
+        if processing == self._processing:
+            return
+        self._processing = processing
+        self.idle_timer.stop()
+        self._sync_schedule()
+        if processing:
+            self.start_bloom()
+
     def _can_animate(self):
-        """Avoid background repainting for processing, hidden and minimized windows."""
+        """Avoid background repainting for hidden and minimized windows."""
         return not self._paused and self.isVisible() and not self.window().isMinimized()
 
     def _bounds(self):
@@ -56,11 +70,6 @@ class AmbientBackground(QWidget):
             .intersected(self.rect())
         )
 
-    def _schedule_idle(self):
-        """Wait a random eight to fifteen seconds with no frame timer running."""
-        if self._can_animate():
-            self.idle_timer.start(self._random.randint(8000, 15000))
-
     def _clear(self):
         """Discard a bloom and cancel queued animation work without catch-up bursts."""
         self.idle_timer.stop()
@@ -70,21 +79,17 @@ class AmbientBackground(QWidget):
             self.update(self._bounds())
 
     def _sync_schedule(self):
-        """Keep exactly one idle timer or frame timer active when animation is allowed."""
+        """Schedule burst starts independently of their animation duration."""
         if not self._can_animate():
             self._clear()
-        elif not self.frame_timer.isActive() and not self.idle_timer.isActive():
-            self._schedule_idle()
+        elif not self.idle_timer.isActive():
+            self.idle_timer.start(self.PROCESSING_MS if self._processing else self.IDLE_MS)
 
     def start_bloom(self):
-        """Start one soft three-color bloom near a random background edge."""
+        """Start one bloom in the visible header behind the controls."""
         if not self._can_animate() or self._active:
             return False
-        self.idle_timer.stop()
-        along = self._random.uniform(0.1, 0.9)
-        self._anchor = self._random.choice(
-            ((along, 0.07), (along, 0.93), (0.03, along), (0.97, along))
-        )
+        self._anchor = (self._random.uniform(0.1, 0.9), self._random.uniform(0.02, 0.08))
         self._colors = self._random.sample(self.COLORS, 3)
         self._duration = self._random.uniform(3, 5)
         self._started = time.monotonic()
@@ -99,8 +104,9 @@ class AmbientBackground(QWidget):
             self._clear()
             return
         if time.monotonic() - self._started >= self._duration:
-            self._clear()
-            self._schedule_idle()
+            self._active = False
+            self.frame_timer.stop()
+            self.update(self._bounds())
         else:
             self.update(self._bounds())
 
@@ -114,7 +120,7 @@ class AmbientBackground(QWidget):
             1.0, max(0.0, (time.monotonic() - self._started) / self._duration)
         )
         opacity = math.sin(math.pi * progress) ** 1.5 * (
-            0.22 if self._theme == "Dark" else 0.14
+            0.40 if self._theme == "Dark" else 0.32
         )
         radius = max(self.width(), self.height()) * (0.17 + 0.08 * progress)
         for index, value in enumerate(self._colors):
@@ -146,6 +152,9 @@ class AmbientBackground(QWidget):
                 self._watched_window.removeEventFilter(self)
             self._watched_window = window
             window.installEventFilter(self)
+            self.installEventFilter(self)
+            for widget in self.findChildren(QWidget):
+                widget.installEventFilter(self)
         super().showEvent(event)
         self._sync_schedule()
 
@@ -155,10 +164,20 @@ class AmbientBackground(QWidget):
         super().hideEvent(event)
 
     def eventFilter(self, watched, event):
-        """Pause minimized windows and restart idle scheduling on restore."""
+        """Handle visibility and respond to workspace input without consuming it."""
         if (
             watched is self._watched_window
             and event.type() == QEvent.Type.WindowStateChange
         ):
             self._sync_schedule()
+        elif self._can_animate() and event.type() in (
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.KeyPress,
+            QEvent.Type.Wheel,
+        ):
+            if not self._processing:
+                self.idle_timer.start(self.IDLE_MS)
+            now = time.monotonic()
+            if now - self._last_interaction_bloom >= 5 and self.start_bloom():
+                self._last_interaction_bloom = now
         return super().eventFilter(watched, event)

@@ -38,12 +38,12 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
-The app background occasionally shows soft blue, cyan, violet and gold gradient
-blooms in both Light and Dark modes. Each bloom drifts and fades over 3–5 seconds,
-with 8–15 seconds of idle time between bursts. The existing controls, photo
-previews and saved pixels are unaffected. Animation pauses during processing and
-stops while the workspace is hidden or minimized; no animation timer runs during
-the idle gap. Restoring the window starts a fresh idle interval.
+The app background shows blue, cyan, violet and gold gradient blooms near the
+header in both Light and Dark modes. After 10 seconds of inactivity, a randomly
+styled bloom starts every 10 seconds. Interactions can also trigger a bloom,
+and blooms start when processing begins and repeat every 5 seconds during longer
+jobs. Each bloom drifts and fades over 3–5 seconds. Animation stops while the
+workspace is hidden or minimized. The blooms are part of the workspace only.
 
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its
 Windows device name and position the whole head and shoulders inside the live
