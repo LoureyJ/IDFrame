@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from app_version import VERSION
+from ambient_background import AmbientBackground
 from photo_sizes import PHOTO_SIZES
 from alignment import OfflineAligner
 from portrait import (
@@ -81,6 +82,7 @@ class PortraitApp(QMainWindow):
         self.resize(min(1240, width), min(780, height))
         self._build_interface()
         apply_theme(self.theme)
+        self.background.set_theme(self.theme)
         self.theme_buttons[self.theme].setChecked(True)
         self.paste_shortcut = QShortcut(QKeySequence.StandardKey.Paste, self)
         self.paste_shortcut.activated.connect(self.paste_photo)
@@ -99,7 +101,7 @@ class PortraitApp(QMainWindow):
 
     def _build_interface(self):
         """Build rounded photo cards and a scrollable inspector with Save kept visible."""
-        central = QWidget()
+        central = self.background = AmbientBackground(theme=self.theme)
         page = QVBoxLayout(central)
         compact = self.width() < 860
         margin = 12 if compact else 20
@@ -320,12 +322,14 @@ class PortraitApp(QMainWindow):
         if name != self.theme:
             self.theme = name
             apply_theme(name)
+            self.background.set_theme(name)
             self.theme_buttons[name].setChecked(True)
             save_theme(name, self.preferences_path)
 
     def _set_busy(self, busy):
         """Keep controls consistent until a background result has been consumed."""
         self.busy = busy
+        self.background.set_paused(busy)
         ready = self.crop.cutout is not None
         for button in (
             self.open_button,

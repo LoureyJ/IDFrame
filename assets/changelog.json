@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.26",
+    "changes": [
+      "Added occasional soft mesh-gradient blooms to the existing app background, with blue, cyan, violet and warm gold colors tuned for Light and Dark modes. The layout, controls, photo previews and saved-photo backgrounds are preserved.",
+      "Blooms gently drift and fade for 3–5 seconds, with randomized 8–15 second idle gaps. Animation pauses during processing and stops while hidden or minimized to keep the workspace responsive."
+    ]
+  },
+  {
     "version": "1.1.25",
     "changes": [
       "Added a Camera button with a live viewfinder and device selector for built-in and USB cameras recognized by Windows. Capture loads the photo into the existing editing workflow; Cancel keeps the previous photo.",

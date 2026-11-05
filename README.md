@@ -38,6 +38,13 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
+The app background occasionally shows soft blue, cyan, violet and gold gradient
+blooms in both Light and Dark modes. Each bloom drifts and fades over 3–5 seconds,
+with 8–15 seconds of idle time between bursts. The existing controls, photo
+previews and saved pixels are unaffected. Animation pauses during processing and
+stops while the workspace is hidden or minimized; no animation timer runs during
+the idle gap. Restoring the window starts a fresh idle interval.
+
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its
 Windows device name, see a live viewfinder, and select **Capture Photo**. The
 captured frame loads as a new original photo; continue with Remove Background,
