@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 from PIL import Image
@@ -45,6 +46,7 @@ from windows_branding import set_taskbar_identity, sync_installed_shortcuts
 from qt_jobs import JobPool
 from qt_preview import PhotoPreview, qt_to_image
 from qt_theme import apply_theme, load_theme, save_theme
+from ui_theme import load_save_folder, save_save_folder
 from qt_dialogs import ask_person_name, changelog_dialog
 
 ROOT = Path(__file__).resolve().parent
@@ -59,6 +61,8 @@ class PortraitApp(QMainWindow):
         set_taskbar_identity()
         self.preferences_path = preferences_path
         self.theme = load_theme(preferences_path)
+        self.save_folder = load_save_folder(preferences_path)
+        self.saved_photo = None
         self.photo = self.result = self.path = None
         self.person_name = ""
         self.size_key = "2x2"
@@ -279,7 +283,13 @@ class PortraitApp(QMainWindow):
             os.environ.get("PORTRAIT_UPDATE_STATUS", "Ready — offline processing")
         )
         self.status_label.setWordWrap(True)
-        page.addWidget(self.status_label)
+        status = QHBoxLayout()
+        status.addWidget(self.status_label, 1)
+        self.show_in_folder_button = QPushButton("Show in Folder")
+        self.show_in_folder_button.clicked.connect(self.show_saved_photo)
+        self.show_in_folder_button.hide()
+        status.addWidget(self.show_in_folder_button)
+        page.addLayout(status)
         self.crop.framing_changed.connect(self._sync_adjustments)
         self.size_combo.currentIndexChanged.connect(self.change_photo_size)
 
@@ -374,6 +384,7 @@ class PortraitApp(QMainWindow):
         """Run a document operation and reject callbacks for a replaced source."""
         generation = self.generation
         self._set_busy(True, action=action, animate=animate)
+        self.show_in_folder_button.hide()
         self.status_label.setText(description)
 
         def completed(value, error):
@@ -395,6 +406,7 @@ class PortraitApp(QMainWindow):
         self.photo, self.path, self.result = photo, path, None
         self.person_name = ""
         self.before.set_image(photo)
+        self.show_in_folder_button.hide()
         self.crop.set_image(None)
         self.status_label.setText(description)
         self._set_busy(False)
@@ -615,10 +627,13 @@ class PortraitApp(QMainWindow):
         except ValueError as error:
             QMessageBox.warning(self, "Invalid name", str(error))
             return
+        suggested = filename
+        if self.save_folder is not None and self.save_folder.is_dir():
+            suggested = str(self.save_folder / filename)
         path, _ = QFileDialog.getSaveFileName(
             self,
             f"Save {preset.short_label} portrait",
-            filename,
+            suggested,
             "PNG image (*.png)",
             options=QFileDialog.Option.DontConfirmOverwrite,
         )
@@ -663,12 +678,30 @@ class PortraitApp(QMainWindow):
 
         self._work(
             export,
-            lambda target: self.status_label.setText(
-                f"Saved {target.name} — {preset.description}"
-            ),
+            lambda target: self._saved(target, preset.description),
             "Saving portrait…",
             action="save",
         )
+
+    def _saved(self, target, description):
+        """Confirm a successful export and remember its actual location."""
+        self.saved_photo = target.absolute()
+        self.save_folder = self.saved_photo.parent
+        save_save_folder(self.save_folder, self.preferences_path)
+        self.status_label.setText(f"Saved {target.name} — {description}")
+        self.show_in_folder_button.show()
+
+    def show_saved_photo(self):
+        """Open File Explorer with the most recently exported photo selected."""
+        target = self.saved_photo
+        if target is None:
+            return
+        try:
+            if not target.is_file():
+                raise FileNotFoundError(target)
+            subprocess.Popen(f'explorer.exe /select,"{target}"')
+        except OSError:
+            QMessageBox.warning(self, "Show in Folder", f"Could not locate {target.name}.")
 
     def closeEvent(self, event):
         """Defer shutdown until callbacks drain without blocking or terminating threads."""

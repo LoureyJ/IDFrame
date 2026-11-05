@@ -70,19 +70,35 @@ def save_theme(name, path=None):
     """Atomically remember appearance without making persistence failures fatal."""
     if name not in PALETTES:
         return False
+    return _save_preference("theme", name, path)
+
+
+def load_save_folder(path=None):
+    """Read the last export folder, if one was saved."""
+    folder = _read_preferences(path or preferences_file()).get("save_folder")
+    return Path(folder) if isinstance(folder, str) and folder else None
+
+
+def save_save_folder(folder, path=None):
+    """Remember the folder used by a successful export."""
+    return _save_preference("save_folder", str(folder), path)
+
+
+def _save_preference(key, value, path):
+    """Atomically update one preference while keeping the others."""
     path = Path(path or preferences_file())
     temporary = None
     try:
         settings = _read_preferences(path)
-        settings["theme"] = name
+        settings[key] = value
         path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(prefix=".appearance-", dir=path.parent)
+        descriptor, temporary = tempfile.mkstemp(prefix=".preferences-", dir=path.parent)
         with os.fdopen(descriptor, "w", encoding="utf-8") as output:
             json.dump(settings, output, indent=2)
         os.replace(temporary, path)
         return True
     except OSError:
-        logging.getLogger(__name__).warning("Could not remember appearance preference")
+        logging.getLogger(__name__).warning("Could not remember preference %s", key)
         return False
     finally:
         if temporary is not None:

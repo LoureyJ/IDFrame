@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QRect, QPoint
 
 from app import PortraitApp
+from ui_theme import load_save_folder
 
 QT_APP = QApplication.instance() or QApplication([])
 
@@ -119,7 +120,19 @@ class QtAppTests(unittest.TestCase):
             self.window.save()
             wait_until(lambda: not self.window.busy)
         self.assertEqual(path.read_bytes(), b"existing")
-        with Image.open(path.with_name("Person_2x2_002.png")) as saved:
+        target = path.with_name("Person_2x2_002.png")
+        self.assertTrue(self.window.show_in_folder_button.isVisible())
+        with patch("app.subprocess.Popen") as launch:
+            self.window.show_in_folder_button.click()
+            launch.assert_called_once_with(f'explorer.exe /select,"{target}"')
+        self.assertEqual(load_save_folder(self.window.preferences_path), path.parent)
+        with (
+            patch("app.ask_person_name", return_value="Next Person"),
+            patch("app.QFileDialog.getSaveFileName", return_value=("", "PNG")) as dialog,
+        ):
+            self.window.save()
+        self.assertEqual(Path(dialog.call_args.args[2]).parent, path.parent)
+        with Image.open(target) as saved:
             self.assertEqual(saved.size, (1200, 1200))
             self.assertEqual(saved.mode, "RGB")
             self.assertAlmostEqual(saved.info["dpi"][0], 600, delta=1)

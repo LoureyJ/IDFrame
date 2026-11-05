@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.32",
+    "changes": [
+      "Added Show in Folder after saving so you can find the finished photo in File Explorer.",
+      "The Save dialog remembers the folder from your last successful export, even after restarting IDFrame."
+    ]
+  },
+  {
     "version": "1.1.31",
     "changes": [
       "Switching removal modes now preserves the current gradient animation and idle countdown while the photo reprocesses."
