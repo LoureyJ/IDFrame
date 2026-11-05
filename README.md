@@ -38,8 +38,8 @@ The main workspace now uses **PySide6 (Qt 6)**. Window resizing and crop draggin
 paint cached image data rather than repeatedly resampling full-size photos.
 Loading, AI inference, display preparation and saving run outside the GUI thread.
 
-The app background shows blue, cyan, violet and gold gradient blooms near the
-header in both Light and Dark modes. After 10 seconds of inactivity, a randomly
+The app background shows blue, cyan, violet and gold gradient blooms across the
+workspace in both Light and Dark modes. After 10 seconds of inactivity, a randomly
 styled bloom starts every 10 seconds. Interactions can also trigger a bloom,
 and blooms start when processing begins and repeat every 5 seconds during longer
 jobs. Each bloom drifts and fades over 3–5 seconds. Animation stops while the

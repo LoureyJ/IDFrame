@@ -62,7 +62,7 @@ class AmbientBackground(QWidget):
 
     def _bounds(self):
         """Bound all drifting gradient lobes so frame updates repaint a limited region."""
-        extent = max(self.width(), self.height()) * 0.42
+        extent = max(self.width(), self.height()) * 0.65
         x, y = self._anchor[0] * self.width(), self._anchor[1] * self.height()
         return (
             QRectF(x - extent, y - extent, extent * 2, extent * 2)
@@ -86,10 +86,10 @@ class AmbientBackground(QWidget):
             self.idle_timer.start(self.PROCESSING_MS if self._processing else self.IDLE_MS)
 
     def start_bloom(self):
-        """Start one bloom in the visible header behind the controls."""
+        """Start one bloom at a random location across the workspace."""
         if not self._can_animate() or self._active:
             return False
-        self._anchor = (self._random.uniform(0.1, 0.9), self._random.uniform(0.02, 0.08))
+        self._anchor = (self._random.random(), self._random.random())
         self._colors = self._random.sample(self.COLORS, 3)
         self._duration = self._random.uniform(3, 5)
         self._started = time.monotonic()
@@ -119,10 +119,11 @@ class AmbientBackground(QWidget):
         progress = min(
             1.0, max(0.0, (time.monotonic() - self._started) / self._duration)
         )
-        opacity = math.sin(math.pi * progress) ** 1.5 * (
-            0.40 if self._theme == "Dark" else 0.32
+        opacity = math.sin(math.pi * progress) * (
+            0.80 if self._theme == "Dark" else 0.74
         )
-        radius = max(self.width(), self.height()) * (0.17 + 0.08 * progress)
+        # Wide lobes reach the exposed workspace around opaque photo cards.
+        radius = max(self.width(), self.height()) * (0.36 + 0.08 * progress)
         for index, value in enumerate(self._colors):
             phase = index * math.tau / 3 + progress * 0.5
             center = QPointF(
@@ -136,6 +137,7 @@ class AmbientBackground(QWidget):
             transparent.setAlpha(0)
             gradient = QRadialGradient(center, spread)
             gradient.setColorAt(0, color)
+            gradient.setColorAt(0.22, color)
             gradient.setColorAt(1, transparent)
             painter.fillRect(
                 QRectF(

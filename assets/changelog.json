@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.29",
+    "changes": [
+      "Made gradient bursts brighter and wider in Light and Dark modes. Bursts now start at random locations across the workspace."
+    ]
+  },
+  {
     "version": "1.1.28",
     "changes": [
       "Made gradient bursts easier to see near the header in Light and Dark modes, with randomized colors and positions every 10 seconds while idle.",

@@ -42,10 +42,17 @@ class AmbientBackgroundTests(unittest.TestCase):
                     "ambient_background.time.monotonic",
                     return_value=100 + canvas._duration / 2,
                 ):
-                    blooming = np.array(qt_to_image(canvas.grab().toImage()))
+                    anchors = ((0.1, 0.1), (0.9, 0.1), (0.5, 0.5), (0.1, 0.9), (0.9, 0.9))
+                    for anchor in anchors:
+                        with self.subTest(anchor=anchor):
+                            canvas._anchor = anchor
+                            blooming = np.array(qt_to_image(canvas.grab().toImage()))
+                            difference = np.abs(blooming.astype(int) - baseline.astype(int))
+                            changed = difference[:, :, :3].max(axis=2) >= 25
+                            self.assertGreater(
+                                np.count_nonzero(changed), 0.01 * changed.size
+                            )
                     self.assertEqual(window.crop.grab().toImage(), before)
-                difference = np.abs(blooming.astype(int) - baseline.astype(int))
-                self.assertGreater(difference[:, :, :3].max(), 8)
                 self.assertEqual(window.crop.export().tobytes(), exported)
                 self.assertEqual(window.save_button.geometry(), geometry)
                 self.assertEqual(window.crop.prepare_count, prepared)
@@ -98,7 +105,6 @@ class AmbientBackgroundTests(unittest.TestCase):
         self.assertEqual(canvas.idle_timer.interval(), 10000)
         canvas.idle_timer.setInterval(30)
         fixtures.wait_until(lambda: canvas.frame_timer.isActive())
-        self.assertLessEqual(canvas._anchor[1], .1)
         canvas.set_paused(True)
         canvas.set_paused(False)
         QTest.mouseClick(self.window.theme_buttons['Dark'], Qt.MouseButton.LeftButton)
