@@ -46,9 +46,12 @@ stops while the workspace is hidden or minimized; no animation timer runs during
 the idle gap. Restoring the window starts a fresh idle interval.
 
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its
-Windows device name, see a live viewfinder, and select **Capture Photo**. The
-captured frame loads as a new original photo; continue with Remove Background,
-Edit and Save. Cancel leaves the existing photo untouched. The device is
+Windows device name and position the whole head and shoulders inside the live
+silhouette. **Capture Photo** stops the camera and shows a clean still preview.
+Choose **Use Photo** to load it as the new original, **Retake** to reopen the
+selected camera, or **Cancel** to keep the previous document. Continue with
+Remove Background, Edit and Save. The camera frame is retained at stream
+resolution; the silhouette is an aid, not an automatic crop. The device is
 released on capture, cancellation or switching cameras. Connecting/disconnecting
 a USB camera refreshes the list automatically; the last selected device is
 remembered for the current app session. Captures stay in memory until you save.
@@ -61,6 +64,23 @@ is unavailable, close other camera apps, check its lens cover, and allow desktop
 camera access in Windows Privacy settings. Qt Multimedia must be included in
 the updated frozen runtime for installed clients; source setup installs the
 matching PySide6-Addons package. Camera access begins only when Camera is opened.
+
+The **Guides** checkbox in the photo-preview heading toggles a head-and-shoulders
+outline, eye-level line, headroom line and centerline. Drag the small dots at the
+right edge to adjust eye level and headroom without moving the photo. Reset
+Adjustments restores the guide positions along with framing and lighting.
+Guides and live-camera dimming never enter captured or exported pixels, and the
+camera review hides them entirely. They work in Light and Dark modes and follow
+the selected photo aspect ratio.
+
+PRC/LERIS reminders follow the [official PRC online-services FAQ](https://www.prc.gov.ph/sites/default/files/FAQs-PRConlineservices3.html)
+and [LERIS guide](https://www.prc.gov.ph/sites/default/files/LERIS-ONLINE-STEP-BY-STEP.pdf):
+2×2, plain white background, collared attire and a photo taken within six months;
+the guide also flags eyeglasses, shadows and covered ears. These are manual
+review reminders. Overlay proportions are illustrative positioning aids, not
+official measured head-size requirements or an automatic compliance result.
+Other size presets remain available. LERIS specifies JPG uploads; the app's
+existing PNG exports are retained by this update.
 
 Choose **Photo size** in the editing panel: **2×2 inches** (1200×1200 pixels),
 **1×1 inch** (600×600 pixels), or **Philippine passport · 35×45 mm** (827×1063

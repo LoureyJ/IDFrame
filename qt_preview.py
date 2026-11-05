@@ -4,11 +4,12 @@ import math
 
 from PIL import Image, ImageOps
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
-from PySide6.QtGui import QImage, QPainter, QColor, QPen
+from PySide6.QtGui import QImage, QPainter, QColor
 from PySide6.QtWidgets import QWidget
 
 from portrait import frame_portrait, MIN_BRIGHTNESS, MAX_BRIGHTNESS
 from photo_sizes import PHOTO_SIZES
+from portrait_guides import paint_guides
 
 
 def image_to_qt(image):
@@ -57,6 +58,9 @@ class PhotoPreview(QWidget):
         self._pending = None
         self._thumbnail = None
         self._drag = None
+        self.guides_visible = True
+        self.guide_eye, self.guide_headroom = 0.38, 0.08
+        self._guide_drag = None
         self.setMinimumSize(100, 100)
         self.setCursor(
             Qt.CursorShape.OpenHandCursor if framing else Qt.CursorShape.ArrowCursor
@@ -155,7 +159,24 @@ class PhotoPreview(QWidget):
 
     def reset(self):
         """Reset crop, rotation and lighting while preserving applied alpha corrections."""
+        self.guide_eye, self.guide_headroom = 0.38, 0.08
         self.set_framing(zoom=1, offset=(0.0, 0.0), brightness=1, rotation=0)
+
+    def set_guides_visible(self, visible):
+        """Toggle positioning graphics without changing the document or export state."""
+        self.guides_visible = bool(visible)
+        self._guide_drag = None
+        self.update()
+
+    def _guide_at(self, position):
+        """Identify only the right-edge handles so ordinary dragging still pans photos."""
+        frame = self.frame_rect()
+        if not self.guides_visible or abs(position.x() - (frame.right() - 10)) > 10:
+            return None
+        for name, value in (("eye", self.guide_eye), ("headroom", self.guide_headroom)):
+            if abs(position.y() - (frame.top() + value * frame.height())) <= 10:
+                return name
+        return None
 
     def frame_rect(self):
         """Fit the selected print aspect ratio inside the available widget area."""
@@ -209,11 +230,14 @@ class PhotoPreview(QWidget):
         painter.rotate(self.rotation)
         painter.drawImage(QRectF(-width / 2, -height / 2, width, height), self.display)
         painter.restore()
-        if self.framing and self.rotation != 0:
-            # A level reference belongs only to the preview, never the saved photo.
-            y = frame.top() + frame.height() * 0.38
-            painter.setPen(QPen(QColor("#2479bb"), 1, Qt.PenStyle.DashLine))
-            painter.drawLine(QPointF(frame.left(), y), QPointF(frame.right(), y))
+        if self.framing and self.guides_visible:
+            paint_guides(
+                painter,
+                frame,
+                eye=self.guide_eye,
+                headroom=self.guide_headroom,
+                handles=True,
+            )
 
     def mousePressEvent(self, event):
         """Start crop panning without mutating any image pixels."""
@@ -222,12 +246,26 @@ class PhotoPreview(QWidget):
             and self.cutout is not None
             and event.button() == Qt.MouseButton.LeftButton
         ):
+            self._guide_drag = self._guide_at(event.position())
+            if self._guide_drag is not None:
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+                return
             self._drag = event.position(), self.offset
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, event):
         """Map a pointer delta into normalized print-frame offsets."""
-        if self._drag is not None:
+        if self._guide_drag is not None:
+            frame = self.frame_rect()
+            fraction = (event.position().y() - frame.top()) / frame.height()
+            if self._guide_drag == "eye":
+                self.guide_eye = max(self.guide_headroom + 0.15, min(0.55, fraction))
+            else:
+                self.guide_headroom = max(
+                    0.02, min(0.25, self.guide_eye - 0.15, fraction)
+                )
+            self.update()
+        elif self._drag is not None:
             start, offset = self._drag
             delta = event.position() - start
             frame = self.frame_rect()
@@ -241,6 +279,7 @@ class PhotoPreview(QWidget):
     def mouseReleaseEvent(self, event):
         """End crop dragging and restore the resting pointer shape."""
         self._drag = None
+        self._guide_drag = None
         self.setCursor(
             Qt.CursorShape.OpenHandCursor
             if self.framing

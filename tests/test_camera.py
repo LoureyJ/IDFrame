@@ -77,10 +77,18 @@ class Sink(QObject):
 class Video(QWidget):
     """Stand in for the video widget while preserving real Qt layout behavior."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, **kwargs):
         """Own a fake frame sink for this viewfinder."""
         super().__init__(parent)
         self.sink = Sink(self)
+
+    def show_review(self, image):
+        """Keep review-state assertions independent of the native renderer."""
+        self.review_image = image.copy()
+
+    def show_live(self):
+        """Reset the fake still preview on Retake."""
+        self.review_image = None
 
     def videoSink(self):
         """Expose the viewfinder's frame source."""
@@ -93,6 +101,10 @@ class Session(QObject):
     def setVideoOutput(self, video):
         """Remember the output widget without requiring a native backend."""
         self.video = video
+
+    def setVideoSink(self, sink):
+        """Attach a sink without opening camera hardware."""
+        self.sink = sink
 
     def setCamera(self, camera):
         """Attach or detach a device from this capture session."""
@@ -128,7 +140,7 @@ class CameraTests(unittest.TestCase):
             ("QMediaDevices", Devices),
             ("QCamera", Camera),
             ("QMediaCaptureSession", Session),
-            ("QVideoWidget", Video),
+            ("CameraView", Video),
             ("QVideoFrame", lambda frame: frame),
         ]:
             manager = patch("camera_dialog." + name, replacement)
@@ -152,6 +164,10 @@ class CameraTests(unittest.TestCase):
         self.dialog.video.videoSink().videoFrameChanged.emit(Frame(image))
         self.assertTrue(self.dialog.capture_button.isEnabled())
         self.dialog.capture_button.click()
+        self.assertNotEqual(self.dialog.result(), self.dialog.DialogCode.Accepted)
+        self.assertTrue(camera.stopped)
+        self.dialog.use_button.click()
+        self.assertEqual(self.dialog.result(), self.dialog.DialogCode.Accepted)
         self.assertEqual(self.dialog.photo.size, (640, 480))
         self.assertEqual(self.dialog.photo.getpixel((0, 0)), (0, 0, 255))
         self.assertEqual(self.dialog.photo.getpixel((639, 479)), (255, 0, 0))
@@ -197,6 +213,54 @@ class CameraTests(unittest.TestCase):
         self.assertIs(self.dialog.camera, active)
         self.assertFalse(active.stopped)
         self.assertEqual(self.dialog.selected_device_id, b"usb")
+
+    def test_review_retake_and_hotplug_preserve_pending_photo(self):
+        """Review pauses camera access; Retake resumes and Cancel discards the still."""
+        image = QImage(640, 480, QImage.Format.Format_RGB32)
+        image.fill(QColor("red"))
+        self.dialog.video.videoSink().videoFrameChanged.emit(Frame(image))
+        self.dialog.capture_button.click()
+        self.assertIsNone(self.dialog.camera)
+        captured = self.dialog.photo
+        self.dialog.devices.videoInputsChanged.emit()
+        self.assertIsNone(self.dialog.camera)
+        self.assertIs(self.dialog.photo, captured)
+        self.dialog.retake_button.click()
+        self.assertIsNone(self.dialog.photo)
+        self.assertIsNotNone(self.dialog.camera)
+        self.assertFalse(self.dialog.capture_button.isEnabled())
+        self.dialog.video.videoSink().videoFrameChanged.emit(Frame(image))
+        self.dialog.capture_button.click()
+        self.dialog.reject()
+        self.assertIsNone(self.dialog.photo)
+
+    def test_small_screen_keeps_review_actions_reachable(self):
+        """Photo reminders must not push Use Photo and Retake off a scaled desktop."""
+        from types import SimpleNamespace
+        from PySide6.QtCore import QRect, QPoint
+
+        available = QRect(0, 0, 683, 512)
+        screen = SimpleNamespace(availableGeometry=lambda: available)
+        with patch("camera_dialog.QApplication.primaryScreen", return_value=screen):
+            dialog = CameraDialog()
+        dialog.show()
+        fixtures.QT_APP.processEvents()
+        try:
+            image = QImage(640, 480, QImage.Format.Format_RGB32)
+            dialog.video.videoSink().videoFrameChanged.emit(Frame(image))
+            dialog.capture_button.click()
+            fixtures.QT_APP.processEvents()
+            self.assertLessEqual(dialog.frameGeometry().height(), available.height())
+            self.assertLessEqual(dialog.frameGeometry().width(), available.width())
+            for button in (dialog.use_button, dialog.retake_button):
+                self.assertTrue(
+                    dialog.rect().contains(
+                        QRect(button.mapTo(dialog, QPoint()), button.size())
+                    )
+                )
+        finally:
+            dialog.reject()
+            dialog.deleteLater()
 
 
 class CameraApplicationTests(unittest.TestCase):

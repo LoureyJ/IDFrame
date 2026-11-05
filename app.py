@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
     QComboBox,
+    QCheckBox,
     QProgressBar,
     QFileDialog,
     QMessageBox,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
 from app_version import VERSION
 from ambient_background import AmbientBackground
 from photo_sizes import PHOTO_SIZES
+from portrait_guides import GUIDE_HELP, PRC_REMINDERS
 from alignment import OfflineAligner
 from portrait import (
     PortraitRemover,
@@ -171,7 +173,18 @@ class PortraitApp(QMainWindow):
             if preview is self.crop:
                 self.preview_title = label
             label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-            layout.addWidget(label)
+            if preview is self.crop:
+                heading = QHBoxLayout()
+                heading.addWidget(label)
+                heading.addStretch()
+                self.guide_checkbox = QCheckBox("Guides")
+                self.guide_checkbox.setChecked(True)
+                self.guide_checkbox.setToolTip(GUIDE_HELP + "\n" + PRC_REMINDERS)
+                self.guide_checkbox.toggled.connect(self.crop.set_guides_visible)
+                heading.addWidget(self.guide_checkbox)
+                layout.addLayout(heading)
+            else:
+                layout.addWidget(label)
             layout.addWidget(preview, 1)
             workspace.addWidget(card, 1)
         inspector, layout = self._card()
@@ -340,6 +353,7 @@ class PortraitApp(QMainWindow):
             button.setEnabled(not busy)
         self.remove_button.setEnabled(not busy and self.photo is not None)
         self.size_combo.setEnabled(not busy)
+        self.guide_checkbox.setEnabled(not busy)
         for control in (
             self.edit_button,
             self.auto_skew_button,
@@ -402,7 +416,13 @@ class PortraitApp(QMainWindow):
                 "Install the latest IDFrame runtime, or run setup.bat in the source project.",
             )
             return
-        dialog = CameraDialog(self, selected_device_id=self.camera_device_id)
+        dialog = CameraDialog(
+            self,
+            selected_device_id=self.camera_device_id,
+            output_size=self.crop.output_size,
+            eye=self.crop.guide_eye,
+            headroom=self.crop.guide_headroom,
+        )
         result = dialog.exec()
         self.camera_device_id = dialog.selected_device_id
         if result == QDialog.DialogCode.Accepted and dialog.photo is not None:

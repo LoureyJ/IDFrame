@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.27",
+    "changes": [
+      "Added head-and-shoulders, eye-level, headroom and centerline guides to the photo preview. Toggle Guides or drag the right-edge dots to adjust eye level and headroom without changing photo pixels.",
+      "Added a silhouette over the live camera feed, with PRC/LERIS photo reminders. Guides adapt to the selected photo size and are positioning aids rather than a compliance check.",
+      "Camera capture now opens a clean still review with Use Photo, Retake and Cancel. Capture releases the camera; Retake reopens it. Guide graphics and dimming are excluded from captured and saved photos."
+    ]
+  },
+  {
     "version": "1.1.26",
     "changes": [
       "Added occasional soft mesh-gradient blooms to the existing app background, with blue, cyan, violet and warm gold colors tuned for Light and Dark modes. The layout, controls, photo previews and saved-photo backgrounds are preserved.",

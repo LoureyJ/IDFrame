@@ -16,7 +16,8 @@ from PySide6.QtMultimedia import (
     QMediaCaptureSession,
     QVideoFrame,
 )
-from PySide6.QtMultimediaWidgets import QVideoWidget
+from camera_view import CameraView
+from portrait_guides import PRC_REMINDERS, GUIDE_HELP
 
 from qt_preview import qt_to_image
 
@@ -24,7 +25,15 @@ from qt_preview import qt_to_image
 class CameraDialog(QDialog):
     """Own camera selection, viewfinder frames and device cleanup for one session."""
 
-    def __init__(self, parent=None, *, selected_device_id=None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        selected_device_id=None,
+        output_size=(1200, 1200),
+        eye=0.38,
+        headroom=0.08,
+    ):
         """Enumerate real device identities without assuming built-in/USB index numbers."""
         super().__init__(parent)
         self.setWindowTitle("IDFrame — Camera")
@@ -33,6 +42,7 @@ class CameraDialog(QDialog):
         self.photo, self.camera, self._frame = None, None, None
         self.selected_device_id = selected_device_id
         self._generation, self._closed = 0, False
+        self._reviewing = False
         self._frame_callback = None
         self._inputs = []
         layout = QVBoxLayout(self)
@@ -40,9 +50,18 @@ class CameraDialog(QDialog):
         self.device_combo = QComboBox()
         self.device_combo.setAccessibleName("Camera device")
         layout.addWidget(self.device_combo)
-        self.video = QVideoWidget(self)
+        self.video = CameraView(
+            self, output_size=output_size, eye=eye, headroom=headroom
+        )
         self.video.setMinimumSize(200, 150)
         layout.addWidget(self.video, 1)
+        reminders = QLabel(PRC_REMINDERS)
+        reminders.setWordWrap(True)
+        reminders.setToolTip(
+            GUIDE_HELP
+            + " Keep the whole head and shoulders visible. Adjust Zoom after removal."
+        )
+        layout.addWidget(reminders)
         self.status = QLabel("Looking for cameras…")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -53,12 +72,21 @@ class CameraDialog(QDialog):
         self.capture_button.setEnabled(False)
         self.capture_button.clicked.connect(self.capture_photo)
         buttons.addWidget(self.capture_button)
+        self.use_button = QPushButton("Use Photo")
+        self.use_button.setProperty("accent", True)
+        self.use_button.clicked.connect(self.use_photo)
+        self.use_button.hide()
+        buttons.addWidget(self.use_button)
+        self.retake_button = QPushButton("Retake")
+        self.retake_button.clicked.connect(self.retake)
+        self.retake_button.hide()
+        buttons.addWidget(self.retake_button)
         cancel = QPushButton("Cancel")
         cancel.clicked.connect(self.reject)
         buttons.addWidget(cancel)
         layout.addLayout(buttons)
         self.session = QMediaCaptureSession(self)
-        self.session.setVideoOutput(self.video)
+        self.session.setVideoSink(self.video.videoSink())
         self.devices = QMediaDevices(self)
         self.devices.videoInputsChanged.connect(self.refresh_devices)
         self.device_combo.currentIndexChanged.connect(self.select_camera)
@@ -70,7 +98,7 @@ class CameraDialog(QDialog):
 
     def refresh_devices(self):
         """Retain the chosen ID on hotplug, or select the operating-system default."""
-        if self._closed:
+        if self._closed or self._reviewing:
             return
         self._inputs = QMediaDevices.videoInputs()
         previous = self.selected_device_id
@@ -102,6 +130,8 @@ class CameraDialog(QDialog):
 
     def select_camera(self, index):
         """Release the old device before starting the newly selected camera."""
+        if self._reviewing:
+            return
         self._stop_camera()
         if not 0 <= index < len(self._inputs):
             self.selected_device_id = None
@@ -140,7 +170,7 @@ class CameraDialog(QDialog):
 
     def _active_changed(self, active):
         """Disable capture whenever a camera stops producing live input."""
-        if not active:
+        if not active and not self._reviewing:
             self._frame = None
             self.capture_button.setEnabled(False)
             self.status.setText(
@@ -149,6 +179,8 @@ class CameraDialog(QDialog):
 
     def _camera_error(self, error, message):
         """Explain busy/permission failures without losing the main portrait document."""
+        if self._reviewing:
+            return
         self._stop_camera()
         self.status.setText(
             message
@@ -158,7 +190,7 @@ class CameraDialog(QDialog):
 
     def _startup_timeout(self):
         """Provide actionable feedback if a driver starts but never delivers a frame."""
-        if self._frame is None and not self._closed:
+        if self._frame is None and not self._closed and not self._reviewing:
             self.status.setText(
                 "No camera frames received. Check the lens cover, Windows camera "
                 "privacy access, and whether another app is using this device."
@@ -175,7 +207,36 @@ class CameraDialog(QDialog):
             )
             return
         self.photo = qt_to_image(image).convert("RGB")
-        self.accept()
+        self._reviewing = True
+        self._stop_camera()
+        self.video.show_review(image)
+        self.device_combo.setEnabled(False)
+        self.capture_button.hide()
+        self.use_button.show()
+        self.use_button.setDefault(True)
+        self.retake_button.show()
+        self.setWindowTitle("IDFrame — Review photo")
+        self.status.setText(
+            "Review your photo. Use Photo keeps it; Retake returns to the camera. Guides are not included."
+        )
+
+    def use_photo(self):
+        """Accept the captured source only after an explicit review decision."""
+        if self._reviewing and self.photo is not None:
+            self.accept()
+
+    def retake(self):
+        """Discard the pending still and reopen the selected device if available."""
+        if not self._reviewing:
+            return
+        self.photo = None
+        self._reviewing = False
+        self.video.show_live()
+        self.use_button.hide()
+        self.retake_button.hide()
+        self.capture_button.show()
+        self.setWindowTitle("IDFrame — Camera")
+        self.refresh_devices()
 
     def _stop_camera(self):
         """Invalidate queued frames, detach the capture session and release the device."""
@@ -198,4 +259,6 @@ class CameraDialog(QDialog):
         """Release the camera on Capture, Cancel, Escape and window close alike."""
         self._closed = True
         self._stop_camera()
+        if result != QDialog.DialogCode.Accepted:
+            self.photo = None
         super().done(result)
