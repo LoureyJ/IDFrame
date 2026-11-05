@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.33",
+    "changes": [
+      "Updated Fine hair to better separate hair from flag fragments beside the head in the tested portrait. Auto also uses the updated Fine hair weights when comparing removal modes."
+    ]
+  },
+  {
     "version": "1.1.32",
     "changes": [
       "Added Show in Folder after saving so you can find the finished photo in File Explorer.",
