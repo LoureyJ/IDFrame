@@ -26,6 +26,7 @@ def main():
         from portrait import PortraitRemover, save_portrait
         from app import PortraitApp
         from qt_editor import CleanupEditor
+        from qt_phone_transfer import PhoneTransferDialog
 
         image = Image.new("RGB", (240, 320), "#6484a8")
         draw = ImageDraw.Draw(image)
@@ -41,6 +42,9 @@ def main():
             device.description() for device in QMediaDevices.videoInputs()
         ]
         window = PortraitApp(sync_shortcuts=False)
+        import qrcode
+
+        assert qrcode.make("http://127.0.0.1/receive/smoke").get_image().width > 0
         editor = CleanupEditor(Image.new("RGBA", (100, 100), "red"), window)
         editor.view.erase_at(QPointF(50, 50), QPointF(50, 50), source_coordinates=True)
         editor.view.finish_stroke()
@@ -63,6 +67,7 @@ def main():
                 "editor": "passed",
                 "camera_preview": "passed",
                 "camera_devices": camera_devices,
+                "phone_transfer": PhoneTransferDialog.__name__,
             }
         output.with_suffix(".json").write_text(json.dumps(report))
         return

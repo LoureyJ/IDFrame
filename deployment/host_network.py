@@ -1,33 +1,12 @@
 """Follow this host PC's active LAN address without changing remote clients."""
 
-import ipaddress
 import json
 import msvcrt
 from pathlib import Path
 import socket
 
 from deployment.common import atomic_write
-
-
-def detect_lan_ip():
-    # UDP connect asks Windows to select its outgoing interface; no data is sent
-    # and no response or internet connection is required.
-    """Ask routing for a usable local IPv4 address without sending network data."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
-            connection.connect(("192.0.2.1", 9))
-            address = connection.getsockname()[0]
-        parsed = ipaddress.ip_address(address)
-        if not (
-            parsed.is_loopback
-            or parsed.is_link_local
-            or parsed.is_unspecified
-            or parsed.is_multicast
-        ):
-            return address
-    except OSError:
-        pass
-    return None
+from lan_address import detect_lan_ip
 
 
 def sync_host_address(root):

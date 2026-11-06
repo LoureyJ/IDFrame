@@ -28,9 +28,11 @@ MIN_BRIGHTNESS = 0.25
 MAX_BRIGHTNESS = 2.0
 
 
-def load_photo(path):
+def load_photo(path, *, formats=None, max_pixels=None):
     """Apply EXIF orientation and composite source transparency onto white RGB pixels."""
-    with Image.open(path) as source:
+    with Image.open(path, formats=formats) as source:
+        if max_pixels is not None and source.width * source.height > max_pixels:
+            raise ValueError("Photo dimensions exceed the upload limit.")
         photo = ImageOps.exif_transpose(source).convert("RGBA")
         # Composite transparent source files before inference.
         white = Image.new("RGBA", photo.size, "white")

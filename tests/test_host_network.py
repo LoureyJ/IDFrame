@@ -102,7 +102,7 @@ class HostNetworkTests(unittest.TestCase):
 
     def test_route_detection_sends_no_data_and_rejects_link_local(self):
         """Verify that route detection sends no data and rejects link local."""
-        with patch("deployment.host_network.socket.socket") as factory:
+        with patch("lan_address.socket.socket") as factory:
             connection = factory.return_value.__enter__.return_value
             connection.getsockname.return_value = ("192.168.83.169", 12345)
             self.assertEqual(detect_lan_ip(), "192.168.83.169")

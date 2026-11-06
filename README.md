@@ -46,6 +46,13 @@ jobs. Paste expands a cyan glow, Remove Background sweeps violet across the
 window, and Save draws gold toward the lower right. Animation stops while the
 workspace is hidden or minimized. The blooms are part of the workspace only.
 
+Use **Receive from Phone** to load a photo over a trusted local network. Scan
+the QR code with your phone, choose a JPEG, PNG, or WebP photo, and tap
+**Send photo**. The photo appears in **Original**. The code expires after five
+minutes or one successful upload. If the phone cannot reach IDFrame, check
+that both devices can reach each other on the LAN and that Windows Firewall
+allows IDFrame on that private network.
+
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its
 Windows device name and position the whole head and shoulders inside the live
 silhouette. **Capture Photo** stops the camera and shows a clean still preview.
@@ -98,7 +105,7 @@ in the 2×2 preview when the angle is nonzero; it is never included in saved pho
 Rotation preserves crop, brightness and cleanup edits. **Reset Adjustments** also
 returns rotation to 0°. Opening another photo starts with no rotation.
 
-The top row is **Open Photo · Camera · Paste Ctrl+V · Auto-skew · Edit**, using
+The top row is **Open Photo · Camera · Receive from Phone · Paste Ctrl+V · Auto-skew · Edit**, using
 blue, cyan, teal, gold and purple to identify each action. After background removal, **Auto-skew**
 estimates a reversible rotation using a bundled offline face detector, including
 sideways/upside-down orientations. It runs only when clicked. Check its result

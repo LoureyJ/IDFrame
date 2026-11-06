@@ -67,6 +67,7 @@ class PortraitApp(QMainWindow):
         self.person_name = ""
         self.size_key = "2x2"
         self.camera_device_id = None
+        self.phone_dialog = None
         self.busy, self.generation = False, 0
         self._close_timer_pending = False
         self.editor = self.changelog_window = None
@@ -142,6 +143,8 @@ class PortraitApp(QMainWindow):
         self.open_button.clicked.connect(self.open_photo)
         self.camera_button = QPushButton("Camera")
         self.camera_button.clicked.connect(self.open_camera)
+        self.phone_button = QPushButton("Receive from Phone")
+        self.phone_button.clicked.connect(self.receive_from_phone)
         self.paste_button = QPushButton("Paste · Ctrl+V")
         self.paste_button.clicked.connect(self.paste_photo)
         self.auto_skew_button = QPushButton("Auto-skew")
@@ -154,6 +157,7 @@ class PortraitApp(QMainWindow):
         for button, color in (
             (self.open_button, "blue"),
             (self.camera_button, "cyan"),
+            (self.phone_button, "cyan"),
             (self.paste_button, "teal"),
             (self.auto_skew_button, "gold"),
             (self.edit_button, "purple"),
@@ -359,6 +363,7 @@ class PortraitApp(QMainWindow):
         for button in (
             self.open_button,
             self.camera_button,
+            self.phone_button,
             self.paste_button,
             *self.mode_buttons,
         ):
@@ -416,6 +421,20 @@ class PortraitApp(QMainWindow):
         self.result = cutout
         self.crop.set_image(cutout)
         self._set_busy(False)
+
+    def receive_from_phone(self):
+        """Replace the current source only after a valid phone upload."""
+        if self.busy or self.phone_dialog is not None:
+            return
+        from qt_phone_transfer import PhoneTransferDialog
+
+        dialog = self.phone_dialog = PhoneTransferDialog(self)
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.photo is not None:
+                self.set_photo(dialog.photo, None, "Photo received from phone")
+        finally:
+            self.phone_dialog = None
+            dialog.deleteLater()
 
     def open_camera(self):
         """Open camera selection on demand and replace the source only after Capture."""
@@ -712,6 +731,8 @@ class PortraitApp(QMainWindow):
                 self._close_timer_pending = True
                 QTimer.singleShot(100, self._retry_close)
             return
+        if self.phone_dialog is not None:
+            self.phone_dialog.reject()
         self.jobs.shutdown()
         try:
             from launcher_refresh import request_launcher_refresh

@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from pathlib import Path
+from http.client import HTTPConnection
 import tempfile
 import threading
 import time
@@ -14,7 +15,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QRect, QPoint
+from PySide6.QtCore import QRect, QPoint, QTimer
 
 from app import PortraitApp
 from ui_theme import load_save_folder
@@ -149,6 +150,62 @@ class QtAppTests(unittest.TestCase):
         )
         self.assertTrue(self.window.save_button.isVisible())
         self.assertTrue(self.window.status_label.isVisible())
+        self.assertTrue(self.window.phone_button.isVisible())
+        self.assertTrue(self.window.rect().contains(self.window.phone_button.mapTo(self.window, QPoint())))
+
+    def test_phone_upload_becomes_original_and_cancel_preserves_it(self):
+        """Exercise the modal dialog, queued delivery, and real upload together."""
+        from urllib.parse import urlsplit
+        from phone_transfer import PhoneTransfer
+        from test_phone_transfer import PhoneTransferTests
+
+        app = self.window
+        original = Image.new("RGB", (20, 20))
+        app.set_photo(original)
+        received = []
+
+        def upload(url):
+            address = urlsplit(url)
+            connection = HTTPConnection(address.hostname, address.port, timeout=3)
+            try:
+                connection.request("POST", address.path, PhoneTransferTests.photo_bytes())
+                received.append(connection.getresponse().status)
+            finally:
+                connection.close()
+
+        def connect_upload():
+            url = app.phone_dialog.address.text()
+            if url:
+                picker.stop()
+                threading.Thread(target=upload, args=(url,), daemon=True).start()
+
+        def reject_and_deliver_late():
+            dialog = app.phone_dialog
+            dialog.reject()
+            dialog.received.emit(original)
+
+        def stop_if_stalled():
+            if app.phone_dialog is not None:
+                app.phone_dialog.reject()
+
+        with patch("qt_phone_transfer.PhoneTransfer", side_effect=lambda: PhoneTransfer(address="127.0.0.1")):
+            timeout = QTimer()
+            timeout.setSingleShot(True)
+            timeout.timeout.connect(stop_if_stalled)
+            timeout.start(10000)
+            picker = QTimer()
+            picker.timeout.connect(connect_upload)
+            picker.start(20)
+            app.phone_button.click()
+            picker.stop()
+            timeout.stop()
+            wait_until(lambda: bool(received))
+            self.assertEqual(received, [200])
+            self.assertEqual(app.photo.size, (13, 17))
+            uploaded = app.photo
+            QTimer.singleShot(0, reject_and_deliver_late)
+            app.phone_button.click()
+            self.assertIs(app.photo, uploaded)
 
     def test_scaled_screen_contains_window_and_save_geometry(self):
         """Small logical desktops retain a bounded frame and reachable Save button."""

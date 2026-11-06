@@ -1,2 +1,2 @@
 """Client version, maintained by the release tools."""
-VERSION = "1.1.33"
+VERSION = "1.1.34"
