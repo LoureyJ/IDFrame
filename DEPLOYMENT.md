@@ -38,8 +38,8 @@ is stopped. Publishing does not require restarting a running host server.
    Existing version 1 clients can run it over their current installation; it
    replaces the old configuration without needing any separate client scripts.
    Building a future installer requires Python 3.12, dependencies in
-   `requirements-build.txt`, and the Inno Setup compiler. A compiler is currently
-   installed in `.tools/inno`; it is a build tool, not part of the client install.
+   `requirements-build.txt`, Inno Setup, and Windows SDK `MakeAppx` and `SignTool`.
+   These are host build tools and are not part of the client installation.
 3. Right-click `allow_host_firewall.bat` and select **Run as administrator**.
    Its inbound TCP rule permits the configured host IP/port from the local subnet.
    This rule works with both Public and Private Windows network profiles.
@@ -66,6 +66,30 @@ It does not require administrator privileges; updates can write to that same fol
 The bundled model is included, so the initial installation works offline too.
 The installer is for 64-bit Windows 10/11. It is not Authenticode-signed; signing
 Windows installers for your organization requires your own code-signing certificate.
+
+## Automatic phone hotspot upgrade
+
+The automatic two-step phone transfer requires Windows 10 build 19041 or later
+and a one-time reinstall using the updated IDFrame installer. The installer keeps
+the existing EXE launcher, installation folder, desktop shortcut, and file-level
+OTA updater. It registers a small signed sparse identity package for the Windows
+`wiFiControl` capability and the short-lived incoming photo connection. The
+receiver binds only to the temporary hotspot interface and uses a one-use URL.
+The app uses the tethering capability to start a temporary
+WPA2/2.4 GHz hotspot, show the Wi-Fi join QR, wait for the phone to connect, then
+show the upload QR. The temporary credentials do not replace the saved Windows
+hotspot credentials. Internet is not needed for the transfer, but Windows must
+have a connected network profile and the PC's adapter must support tethering.
+
+The identity package is signed with a self-signed IDFrame certificate for this
+in-house deployment. The installer adds only its public certificate to the
+installing user's `TrustedPeople` store and registers the package for that user.
+The private `hotspot-package-signing.pfx` remains under `.host/`; include it in
+the private host backup and never copy it to clients or GitHub. Uninstalling
+IDFrame removes its identity package and its matching public certificate.
+Subsequent application-code changes continue through the normal OTA process; an
+installer rebuild is needed only for a new PC that has never received the
+identity package or when the package identity changes.
 
 ## Publishing code changes
 

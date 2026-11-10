@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.38",
+    "changes": [
+      "Automatic hotspot startup requires a one-time reinstall with the updated package installer on existing client PCs.",
+      "Phone transfer now starts a temporary local Wi-Fi hotspot and shows a join QR first. When the phone connects, IDFrame switches to a second QR for sending the photo.",
+      "The phone photo is processed automatically after transfer. Saving the finished photo clears IDFrame's received original from that session; the copy on the phone is unchanged."
+    ]
+  },
+  {
     "version": "1.1.37",
     "changes": [
       "Added a PC Hotspot path to Receive from Phone. Turn on Windows Mobile Hotspot, connect your phone, and use a local QR transfer without Internet access.",

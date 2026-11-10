@@ -46,12 +46,14 @@ jobs. Paste expands a cyan glow, Remove Background sweeps violet across the
 window, and Save draws gold toward the lower right. Animation stops while the
 workspace is hidden or minimized. The blooms are part of the workspace only.
 
-Use **Receive from Phone** to load a photo over a trusted local network. Scan
-the QR code with your phone, choose a JPEG, PNG, or WebP photo, and tap
-**Send photo**. The photo appears in **Original**. The code expires after five
-minutes or one successful upload. If the phone cannot reach IDFrame, check
-that both devices can reach each other on the LAN and that Windows Firewall
-allows IDFrame on that private network.
+Use **Receive from Phone** for an offline local transfer. IDFrame starts this
+PC's temporary Wi-Fi hotspot and shows a QR code to join it. After Windows sees
+the phone connect, IDFrame replaces that code with a one-use upload QR. Scan it,
+choose the photo, and tap **Send photo**. IDFrame removes the background
+automatically. The transfer code expires after five minutes or one successful
+upload. Save the finished photo to clear IDFrame's received original from its
+session; the copy on the phone stays untouched. A one-time installer update is
+required before automatic hotspot startup works on an existing client PC.
 
 Use **Camera** beside Open Photo to choose a built-in or USB camera by its
 Windows device name and position the whole head and shoulders inside the live

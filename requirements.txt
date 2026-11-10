@@ -5,3 +5,5 @@ pillow-heif>=0.18,<2
 PySide6-Essentials==6.10.3
 PySide6-Addons==6.10.3
 qrcode==8.2
+winrt-Windows.Networking.Connectivity==3.2.1
+winrt-Windows.Networking.NetworkOperators==3.2.1

@@ -6,19 +6,19 @@ import threading
 import time
 
 import qrcode
-from PySide6.QtCore import Qt, QTimer, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtNetwork import QNetworkInterface
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QLabel,
-    QPushButton,
     QVBoxLayout,
 )
 
 from phone_transfer import PhoneTransfer
 from qt_preview import image_to_qt
+from windows_hotspot import WindowsHotspot
 
 
 class PhoneTransferDialog(QDialog):
@@ -33,16 +33,21 @@ class PhoneTransferDialog(QDialog):
         self.setWindowTitle("Receive from Phone")
         self.photo = None
         self.session = None
+        self.hotspot = None
         self._receiver_id = 0
         self._finished = False
+        self._upload_url = None
+        self._phone_connected = False
+        self._hotspot_credentials = None
+        self._hotspot_ip_deadline = 0
         layout = QVBoxLayout(self)
-        instructions = QLabel(
-            "No Internet is needed. Connect both devices to the same Wi-Fi, "
-            "then scan the QR code and send a photo."
-        )
+        instructions = QLabel("IDFrame is preparing a private Wi-Fi connection…")
         self.instructions = instructions
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
+        self.stage = QLabel("Step 1 of 2 · Connect to IDFrame Wi-Fi")
+        self.stage.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.stage)
         self.qr = QLabel()
         self.qr.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.qr)
@@ -50,30 +55,25 @@ class PhoneTransferDialog(QDialog):
         self.address.setWordWrap(True)
         self.address.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.address)
-        self.status = QLabel("Starting receiver…")
+        self.status = QLabel("Starting this PC’s hotspot…")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        self.hotspot_button = QPushButton("Use This PC’s Hotspot")
-        self.hotspot_button.clicked.connect(self._prepare_hotspot)
-        layout.addWidget(self.hotspot_button)
-        self.open_settings_button = QPushButton("Open Mobile Hotspot Settings")
-        self.open_settings_button.clicked.connect(self._open_hotspot_settings)
-        self.open_settings_button.hide()
-        layout.addWidget(self.open_settings_button)
-        self.start_hotspot_button = QPushButton("Start Hotspot Transfer")
-        self.start_hotspot_button.clicked.connect(self._start_hotspot_receiver)
-        self.start_hotspot_button.hide()
-        layout.addWidget(self.start_hotspot_button)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.setMinimumWidth(375)
         self.timer = QTimer(self, interval=250)
         self.timer.timeout.connect(self._update_countdown)
+        self.address_timer = QTimer(self, interval=350)
+        self.address_timer.timeout.connect(self._find_hotspot_address)
         self.ready.connect(self._receiver_ready)
         self.received.connect(self._accept_photo)
         self.unavailable.connect(self._show_unavailable)
-        self._start_receiver()
+        self.hotspot = WindowsHotspot(self)
+        self.hotspot.started.connect(self._hotspot_started)
+        self.hotspot.connected.connect(self._hotspot_connected)
+        self.hotspot.failed.connect(self._hotspot_failed)
+        self.hotspot.start()
 
     def _start_receiver(self, address=None):
         """Start a one-use receiver on the selected local network interface."""
@@ -87,50 +87,92 @@ class PhoneTransferDialog(QDialog):
             daemon=True,
         ).start()
 
-    def _prepare_hotspot(self):
-        """Pause the current receiver and present Windows hotspot setup steps."""
-        if self.session is not None:
-            self.session.close()
-        self._receiver_id += 1
-        self.timer.stop()
-        self.qr.clear()
-        self.address.clear()
+    def _hotspot_started(self, credentials):
+        """Show the Wi-Fi join QR and wait for the hotspot adapter to appear."""
+        if self._finished:
+            return
+        self._hotspot_credentials = credentials
+        self._hotspot_ip_deadline = time.monotonic() + 20
         self.instructions.setText(
-            "Turn on Mobile Hotspot on this PC, then connect your phone to its "
-            "Wi-Fi network. Return here and start the hotspot transfer QR. "
+            "Scan this QR code with the phone’s camera to join IDFrame Wi-Fi. "
+            "When the phone connects, this QR changes to the photo-transfer code. "
             "Internet access is not required."
         )
-        self.hotspot_button.hide()
-        self.open_settings_button.show()
-        self.start_hotspot_button.show()
-        self.status.setText("Enable the hotspot and connect your phone.")
-        self._open_hotspot_settings()
+        self._show_wifi_code(credentials["ssid"], credentials["passphrase"])
+        self.status.setText("Waiting for the phone to connect to this PC…")
+        self.address_timer.start()
 
-    def _open_hotspot_settings(self):
-        """Open the built-in Windows Mobile Hotspot settings page."""
-        if not QDesktopServices.openUrl(QUrl("ms-settings:network-mobilehotspot")):
-            self.status.setText(
-                "Open Windows Settings → Network & Internet → Mobile hotspot."
-            )
+    def _show_wifi_code(self, ssid, passphrase):
+        """Display the temporary hotspot credentials as a standards-based Wi-Fi QR."""
+        qr_payload = f"WIFI:T:WPA;S:{ssid};P:{passphrase};;"
+        image = qrcode.make(qr_payload, box_size=6, border=4).get_image().convert("RGBA")
+        self.qr.setPixmap(QPixmap.fromImage(image_to_qt(image)))
+        self.address.setText(f"Wi-Fi network: {ssid}\nPassword: {passphrase}")
 
-    def _start_hotspot_receiver(self):
-        """Bind the transfer session to the active Windows hotspot adapter."""
-        address = detect_mobile_hotspot_ip()
-        if address is None:
-            self.status.setText(
-                "IDFrame could not find an active PC hotspot. Turn on Mobile "
-                "Hotspot in Windows Settings, then try again."
-            )
+    def _find_hotspot_address(self):
+        """Wait briefly for Windows to assign the hotspot adapter its local IPv4."""
+        if self._finished:
+            self.address_timer.stop()
             return
-        self.start_hotspot_button.setEnabled(False)
-        self.status.setText("Starting the local hotspot receiver…")
+        address = detect_mobile_hotspot_ip()
+        if not address:
+            if time.monotonic() >= self._hotspot_ip_deadline:
+                self.address_timer.stop()
+                self.qr.clear()
+                self.address.clear()
+                self.status.setText(
+                    "Windows started the hotspot, but IDFrame could not find its "
+                    "local network address. Close this window and try again."
+                )
+                if self.hotspot is not None:
+                    self.hotspot.stop()
+            return
+        self.address_timer.stop()
+        self.status.setText("Hotspot ready. Waiting for your phone to connect…")
         self._start_receiver(address)
+
+    def _hotspot_connected(self):
+        """Switch to the upload QR only after Windows detects the phone connection."""
+        if self._finished:
+            return
+        self._phone_connected = True
+        self._show_upload_code_if_ready()
+
+    def _hotspot_failed(self, message):
+        """Report Windows tethering limitations without losing the current workspace."""
+        if self._finished:
+            return
+        self.address_timer.stop()
+        self.qr.clear()
+        self.address.clear()
+        self.status.setText(message)
+        self.instructions.setText(
+            "Connect this PC to Ethernet or Wi-Fi and make sure Mobile Hotspot is "
+            "allowed for its Wi-Fi adapter. Internet access is not needed."
+        )
 
     def _receiver_ready(self, result):
         """Show a QR only when it belongs to the most recent receiver session."""
         receiver_id, url = result
         if receiver_id == self._receiver_id:
-            self._show_code(url)
+            self._upload_url = url
+            self._update_countdown()
+            self.timer.start()
+            self._show_upload_code_if_ready()
+
+    def _show_upload_code_if_ready(self):
+        """Render the second-step upload code after both prerequisites are met."""
+        if not self._phone_connected or not self._upload_url or self._finished:
+            return
+        image = qrcode.make(self._upload_url, box_size=6, border=4).get_image().convert("RGBA")
+        self.qr.setPixmap(QPixmap.fromImage(image_to_qt(image)))
+        self.stage.setText("Step 2 of 2 · Send the photo")
+        self.instructions.setText(
+            "Phone connected. Scan this new QR code with the phone’s camera, "
+            "choose the photo, then tap Send photo."
+        )
+        self.address.setText(self._upload_url)
+        self.status.setText("The photo will be processed automatically after transfer.")
 
     def _run_receiver(self, session, receiver_id):
         """Start the network listener off the GUI thread."""
@@ -155,20 +197,14 @@ class PhoneTransferDialog(QDialog):
                 "Could not start the receiver. Check this PC's network connection.",
             )
 
-    def _show_code(self, url):
-        """Render a high-contrast QR code with its quiet zone intact."""
-        if self._finished:
-            return
-        image = qrcode.make(url, box_size=6, border=4).get_image().convert("RGBA")
-        self.qr.setPixmap(QPixmap.fromImage(image_to_qt(image)))
-        self.address.setText(url)
-        self._update_countdown()
-        self.timer.start()
-
     def _update_countdown(self):
         """Show how long the QR code remains usable."""
         seconds = max(0, math.ceil(self.session.deadline - time.monotonic()))
-        self.status.setText(f"Expires in {seconds // 60}:{seconds % 60:02d}")
+        remaining = f"{seconds // 60}:{seconds % 60:02d}"
+        if self._phone_connected and self._upload_url:
+            self.status.setText(f"Scan the upload QR · expires in {remaining}")
+        else:
+            self.status.setText(f"Waiting for phone connection · expires in {remaining}")
 
     def _show_unavailable(self, message):
         """Remove a QR code that can no longer be used."""
@@ -180,8 +216,9 @@ class PhoneTransferDialog(QDialog):
         self.timer.stop()
         self.qr.clear()
         self.address.clear()
-        self.start_hotspot_button.setEnabled(True)
         self.status.setText(message)
+        if self.hotspot is not None:
+            self.hotspot.stop()
 
     def _accept_photo(self, result):
         """Ignore queued results once the matching dialog has finished."""
@@ -194,8 +231,11 @@ class PhoneTransferDialog(QDialog):
         """Cancel the session on every dialog exit path."""
         self._finished = True
         self.timer.stop()
+        self.address_timer.stop()
         if self.session is not None:
             self.session.close()
+        if self.hotspot is not None:
+            self.hotspot.stop()
         super().done(result)
 
 

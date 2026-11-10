@@ -38,6 +38,11 @@ def source_fingerprint(root):
     sources.extend(root.glob("*.ps1"))
     sources.extend((root / "deployment").glob("*.py"))
     sources.extend((root / "deployment").glob("*.iss"))
+    sources.extend(
+        path
+        for path in (root / "deployment" / "hotspot").rglob("*")
+        if path.is_file()
+    )
     sources.extend(path for path in (root / "assets").rglob("*") if path.is_file())
     sources.extend(path for path in (root / "models").glob("*.onnx") if path.is_file())
     sources.extend(

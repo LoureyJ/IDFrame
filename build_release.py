@@ -50,7 +50,12 @@ def remove_build_dir(path):
     """Remove only an explicitly allowed generated build directory."""
     path = Path(path).resolve()
     # Only remove named generated directories inside this workspace.
-    if path not in {(BUILD / "runtime-dist").resolve(), (CLIENT / "payload").resolve()}:
+    if path not in {
+        (BUILD / "runtime-dist").resolve(),
+        (BUILD / "hotspot-identity").resolve(),
+        (CLIENT / "payload").resolve(),
+        (CLIENT / "identity-assets").resolve(),
+    }:
         raise ValueError("Unexpected build cleanup target")
     if path.exists():
         shutil.rmtree(path)
@@ -77,6 +82,157 @@ def compiler_path():
     )
 
 
+def windows_sdk_tool_path(tool_name):
+    """Locate a Windows SDK packaging tool in the bundled cache or standard SDK path."""
+    tools = [
+        ROOT / ".tools" / "windows-sdk-buildtools" / "bin" / "10.0.26100.0" / "x64" / tool_name,
+    ]
+    kits = os.environ.get("ProgramFiles(x86)")
+    if kits:
+        sdk_bin = Path(kits) / "Windows Kits" / "10" / "bin"
+        if sdk_bin.is_dir():
+            tools.extend(
+                path
+                for version in sorted(sdk_bin.iterdir(), reverse=True)
+                for path in (version / "x64" / tool_name,)
+            )
+    tools.extend(
+        Path(path) for path in [shutil.which(tool_name) or ""] if path
+    )
+    for tool in tools:
+        if tool.is_file():
+            return tool
+    raise RuntimeError(
+        f"{tool_name} is required to build the hotspot identity package. "
+        "Install the Windows 10/11 SDK or Windows SDK BuildTools package."
+    )
+
+
+def hotspot_package_signing_material():
+    """Create or reuse the private host signing key and public package certificate."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+    from datetime import datetime, timedelta, timezone
+
+    private_path = HOST / "hotspot-package-signing.pfx"
+    public_path = HOST / "hotspot-package-signing.cer"
+    if private_path.is_file() and public_path.is_file():
+        return private_path, public_path
+    if private_path.exists() or public_path.exists():
+        raise RuntimeError(
+            "Only one IDFrame hotspot signing certificate file exists. Restore both "
+            "files from the host backup before building an installer."
+        )
+
+    HOST.mkdir(exist_ok=True)
+    # MSIX package signing uses the Windows RSA Authenticode path.
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "IDFrame Local Hotspot")]
+    )
+    now = datetime.now(timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5))
+        .not_valid_after(now + timedelta(days=3650))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=True,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CODE_SIGNING]),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    pfx = pkcs12.serialize_key_and_certificates(
+        b"IDFrame Local Hotspot",
+        key,
+        certificate,
+        None,
+        serialization.NoEncryption(),
+    )
+    atomic_write(private_path, pfx)
+    atomic_write(public_path, certificate.public_bytes(serialization.Encoding.DER))
+    return private_path, public_path
+
+
+def build_hotspot_identity(version):
+    """Build the installer-only sparse identity MSIX and stage its public assets."""
+    package_version = version if len(version.split(".")) == 4 else version + ".0"
+    if any(int(part) > 65535 for part in package_version.split(".")):
+        raise ValueError("The Windows identity package version fields must be <= 65535")
+    private_cert, public_cert = hotspot_package_signing_material()
+    source_manifest = ROOT / "deployment" / "hotspot" / "AppxManifest.xml"
+    work = BUILD / "hotspot-identity"
+    if work.exists():
+        remove_build_dir(work)
+    work.mkdir(parents=True)
+    manifest = work / "AppxManifest.xml"
+    raw = source_manifest.read_text(encoding="utf-8")
+    manifest.write_text(
+        raw.replace("__PACKAGE_VERSION__", package_version), encoding="utf-8"
+    )
+    # Package logos must be physically inside the sparse MSIX. The full-trust
+    # runtime executable and its payload stay under the external install root.
+    shutil.copytree(
+        ROOT / "deployment" / "hotspot" / "Assets",
+        work / "Assets",
+    )
+    package = CLIENT / "IDFrameHotspot.identity.msix"
+    package.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            windows_sdk_tool_path("makeappx.exe"),
+            "pack",
+            "/o",
+            "/d",
+            work,
+            "/nv",
+            "/p",
+            package,
+        ]
+    )
+    run(
+        [
+            windows_sdk_tool_path("signtool.exe"),
+            "sign",
+            "/fd",
+            "SHA256",
+            "/f",
+            private_cert,
+            package,
+        ]
+    )
+    assets = CLIENT / "identity-assets"
+    if assets.exists():
+        remove_build_dir(assets)
+    shutil.copytree(ROOT / "deployment" / "hotspot" / "Assets", assets / "Assets")
+    shutil.copy2(public_cert, assets / "IDFramePackage.cer")
+    shutil.copy2(
+        ROOT / "deployment" / "hotspot" / "register_package.ps1",
+        CLIENT / "register_hotspot_package.ps1",
+    )
+
+
 def build_runtime(force=False):
     """Reuse or rebuild the frozen CPU runtime when its inputs change."""
     fingerprint = canonical(
@@ -84,6 +240,7 @@ def build_runtime(force=False):
             "builder": digest(ROOT / "build_release.py"),
             "runtime": digest(ROOT / "deployment" / "runtime.py"),
             "icon": digest(ROOT / "assets" / "portrait-studio.ico"),
+            "manifest": digest(ROOT / "deployment" / "hotspot" / "runtime.manifest"),
             "packages": sorted(
                 (d.metadata["Name"], d.version)
                 for d in importlib.metadata.distributions()
@@ -111,6 +268,8 @@ def build_runtime(force=False):
                 "--noupx",
                 "--icon",
                 ROOT / "assets" / "portrait-studio.ico",
+                "--manifest",
+                ROOT / "deployment" / "hotspot" / "runtime.manifest",
                 "--name",
                 "PortraitRuntime",
                 "--distpath",
@@ -149,6 +308,12 @@ def build_runtime(force=False):
                 "PySide6.QtMultimedia",
                 "--hidden-import",
                 "PySide6.QtMultimediaWidgets",
+                "--hidden-import",
+                "winrt.windows.networking.connectivity",
+                "--hidden-import",
+                "winrt.windows.networking.networkoperators",
+                "--collect-all",
+                "winrt",
                 "--collect-binaries",
                 "onnxruntime",
                 "--collect-all",
@@ -286,6 +451,8 @@ def main():
         )
         runtime = build_runtime(args.rebuild_runtime)
         launcher = build_launcher()
+        if args.installer:
+            build_hotspot_identity(version)
         payload = assemble_payload(runtime, launcher)
         # Building an installer must not publish to the live OTA channel.
         repository = (

@@ -22,6 +22,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0.19041
 OutputDir={#OutputDir}
 OutputBaseFilename=IDFrame-Setup-{#AppVersion}
 Compression=lzma2/fast
@@ -36,6 +37,10 @@ RestartApplications=no
 Source: "{#ClientDir}\PortraitStudio.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ClientDir}\installed-manifest.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ClientDir}\payload\*"; DestDir: "{app}\payload"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ClientDir}\IDFrameHotspot.identity.msix"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ClientDir}\identity-assets\IDFramePackage.cer"; DestDir: "{app}\Assets"; Flags: ignoreversion
+Source: "{#ClientDir}\identity-assets\Assets\*"; DestDir: "{app}\Assets"; Flags: ignoreversion
+Source: "{#ClientDir}\register_hotspot_package.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autodesktop}\IDFrame"; Filename: "{app}\PortraitStudio.exe"; WorkingDir: "{app}"; IconFilename: "{app}\payload\assets\portrait-studio.ico"; AppUserModelID: "PortraitStudio.Desktop"
@@ -43,6 +48,9 @@ Name: "{group}\IDFrame"; Filename: "{app}\PortraitStudio.exe"; WorkingDir: "{app
 
 [Run]
 Filename: "{app}\PortraitStudio.exe"; Description: "Open IDFrame"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -File ""{app}\register_hotspot_package.ps1"" -InstallRoot ""{app}"" -Unregister"; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 Type: files; Name: "{app}\client.json"
@@ -85,12 +93,24 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-// Persist the chosen host URL after installation finishes.
+// Register local hotspot access, then persist the selected host URL.
 var
   URL: String;
+  ResultCode: Integer;
+  Parameters: String;
 begin
   if CurStep = ssPostInstall then
   begin
+    Parameters := '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' +
+      ExpandConstant('{app}\register_hotspot_package.ps1') +
+      '" -InstallRoot "' + ExpandConstant('{app}') +
+      '" -PackageVersion "{#AppVersion}.0"';
+    if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or
+      (ResultCode <> 0) then
+      RaiseException('IDFrame could not register Windows hotspot access. ' +
+        'Confirm that Windows 10 version 2004 or later allows the IDFrame package certificate.');
+
     URL := Trim(HostPage.Values[0]);
     StringChangeEx(URL, '\', '\\', True);
     StringChangeEx(URL, '"', '\"', True);
