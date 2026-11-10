@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.41",
+    "changes": [
+      "The installer configures local Windows Firewall access so phones connected to the IDFrame hotspot can open the photo-transfer page."
+    ]
+  },
+  {
     "version": "1.1.39",
     "changes": [
       "Hotspot package-registration failures now include a local diagnostic log for easier troubleshooting."

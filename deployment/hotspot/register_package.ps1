@@ -14,6 +14,7 @@ $packagePath = Join-Path $InstallRoot 'IDFrameHotspot.identity.msix'
 $certificatePath = Join-Path $InstallRoot 'Assets\IDFramePackage.cer'
 $machineStore = 'Cert:\LocalMachine\TrustedPeople'
 $userStore = 'Cert:\CurrentUser\TrustedPeople'
+$firewallRuleName = 'IDFrame-Phone-Transfer-Inbound'
 
 function Write-SuccessMarker {
     # Let Inno Setup confirm the privileged certificate action completed.
@@ -43,9 +44,27 @@ if ($TrustMachine) {
     try {
         Import-Certificate -FilePath $certificatePath `
             -CertStoreLocation $machineStore | Out-Null
+        # The receiver uses a temporary TCP port, so scope access to this app and
+        # local subnets instead of opening a fixed port or allowing Internet traffic.
+        Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        New-NetFirewallRule `
+            -Name $firewallRuleName `
+            -DisplayName 'IDFrame phone photo transfer' `
+            -Description 'Allows local devices to reach IDFrame during a one-time photo transfer.' `
+            -Program (Join-Path $InstallRoot 'PortraitStudio.exe') `
+            -Direction Inbound `
+            -Action Allow `
+            -Protocol TCP `
+            -LocalPort Any `
+            -RemoteAddress LocalSubnet `
+            -Profile Any `
+            -EdgeTraversalPolicy Block | Out-Null
         Write-SuccessMarker
         exit 0
     } catch {
+        Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
         if (-not $hadMachineCertificate) {
             Get-ChildItem $machineStore |
                 Where-Object Thumbprint -eq $certificate.Thumbprint |
@@ -57,6 +76,8 @@ if ($TrustMachine) {
 }
 
 if ($RemoveMachineTrust) {
+    Get-NetFirewallRule -Name $firewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction Stop
     Get-ChildItem $machineStore |
         Where-Object Thumbprint -eq $certificate.Thumbprint |
         Remove-Item -ErrorAction Stop

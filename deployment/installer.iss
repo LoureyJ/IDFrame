@@ -127,7 +127,7 @@ begin
       '" -PackageVersion "{#AppVersion}.0"';
 
     if not RunMachineTrustAction('-TrustMachine') then
-      RaiseException('IDFrame needs administrator approval to trust its hotspot package. ' +
+      RaiseException('IDFrame needs administrator approval to enable local phone transfer. ' +
         'Retry setup and approve the Windows administrator prompt. If it still fails, see ' +
         ExpandConstant('{app}\IDFrame-hotspot-registration.log') + '.');
 
@@ -153,8 +153,9 @@ begin
      FileExists(ExpandConstant('{app}\Assets\IDFramePackage.cer')) then
   begin
     if not RunMachineTrustAction('-RemoveMachineTrust') then
-      MsgBox('IDFrame was removed, but Windows did not remove its machine-wide ' +
-        'package certificate. An administrator can remove the IDFrame Local Hotspot ' +
-        'certificate from Local Machine > Trusted People.', mbInformation, MB_OK);
+      MsgBox('IDFrame was removed, but Windows did not remove its phone-transfer ' +
+        'firewall rule and machine-wide package certificate. An administrator can remove ' +
+        'the IDFrame phone photo transfer rule and IDFrame Local Hotspot certificate.',
+        mbInformation, MB_OK);
   end;
 end;
