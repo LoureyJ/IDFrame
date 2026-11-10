@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.1.37",
+    "changes": [
+      "Added a PC Hotspot path to Receive from Phone. Turn on Windows Mobile Hotspot, connect your phone, and use a local QR transfer without Internet access.",
+      "Phone uploads now start background removal automatically. After a successful save, IDFrame clears the received original from its session memory; the copy on the phone remains unchanged."
+    ]
+  },
+  {
     "version": "1.1.36",
     "changes": [
       "Added an optional Sharpen slider below Brightness. Preview and saved photos use the same setting, which starts at 0% and leaves the white background unchanged.",

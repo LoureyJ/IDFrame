@@ -64,6 +64,7 @@ class PortraitApp(QMainWindow):
         self.save_folder = load_save_folder(preferences_path)
         self.saved_photo = None
         self.photo = self.result = self.path = None
+        self.source_received_from_phone = False
         self.person_name = ""
         self.size_key = "2x2"
         self.camera_device_id = None
@@ -414,6 +415,7 @@ class PortraitApp(QMainWindow):
         """Replace source data and invalidate all previous removal and editing state."""
         self.generation += 1
         self.photo, self.path, self.result = photo, path, None
+        self.source_received_from_phone = False
         self.person_name = ""
         self.before.set_image(photo)
         self.show_in_folder_button.hide()
@@ -436,7 +438,11 @@ class PortraitApp(QMainWindow):
         dialog = self.phone_dialog = PhoneTransferDialog(self)
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.photo is not None:
-                self.set_photo(dialog.photo, None, "Photo received from phone")
+                received_photo = dialog.photo
+                dialog.photo = None
+                self.set_photo(received_photo, None, "Photo received from phone")
+                self.source_received_from_phone = True
+                self.remove()
         finally:
             self.phone_dialog = None
             dialog.deleteLater()
@@ -704,10 +710,22 @@ class PortraitApp(QMainWindow):
 
         self._work(
             export,
-            lambda target: self._saved(target, preset.description),
+            lambda target: self._save_completed(target, preset.description),
             "Saving portrait…",
             action="save",
         )
+
+    def _save_completed(self, target, description):
+        """Confirm the export and clear an uploaded source photo from this session."""
+        self._saved(target, description)
+        if self.source_received_from_phone:
+            self.photo = None
+            self.path = None
+            self.source_received_from_phone = False
+            self.before.set_image(None)
+            self.status_label.setText(
+                f"Saved {target.name} — received original cleared from IDFrame."
+            )
 
     def _saved(self, target, description):
         """Confirm a successful export and remember its actual location."""

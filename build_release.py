@@ -144,6 +144,8 @@ def build_runtime(force=False):
                 "--hidden-import",
                 "PySide6.QtWidgets",
                 "--hidden-import",
+                "PySide6.QtNetwork",
+                "--hidden-import",
                 "PySide6.QtMultimedia",
                 "--hidden-import",
                 "PySide6.QtMultimediaWidgets",
