@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.42",
+    "changes": [
+      "Fixed hotspot startup in the packaged app by including the required Windows Foundation runtime binding.",
+      "Serialized hotspot start and shutdown so reopening Receive from Phone waits for the previous hotspot session to finish closing.",
+      "IDFrame now disconnects the hotspot after confirming a photo was received, including a hotspot that was already active when transfer started."
+    ]
+  },
+  {
     "version": "1.1.41",
     "changes": [
       "The installer configures local Windows Firewall access so phones connected to the IDFrame hotspot can open the photo-transfer page."

@@ -312,6 +312,8 @@ def build_runtime(force=False):
                 "winrt.windows.networking.connectivity",
                 "--hidden-import",
                 "winrt.windows.networking.networkoperators",
+                "--hidden-import",
+                "winrt.windows.foundation",
                 "--collect-all",
                 "winrt",
                 "--collect-binaries",

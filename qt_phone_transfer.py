@@ -235,7 +235,9 @@ class PhoneTransferDialog(QDialog):
         if self.session is not None:
             self.session.close()
         if self.hotspot is not None:
-            self.hotspot.stop()
+            self.hotspot.stop(
+                disconnect_existing=result == QDialog.DialogCode.Accepted
+            )
         super().done(result)
 
 

@@ -7,6 +7,10 @@ import threading
 from PySide6.QtCore import QObject, Signal
 
 
+# Do not start a new dialog's hotspot while a previous session is shutting down.
+_HOTSPOT_SESSION_LOCK = threading.Lock()
+
+
 class WindowsHotspot(QObject):
     """Start, monitor, and stop only the hotspot session owned by this dialog."""
 
@@ -17,6 +21,7 @@ class WindowsHotspot(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._stop_requested = threading.Event()
+        self._disconnect_existing_requested = threading.Event()
         self._thread = None
 
     def start(self):
@@ -30,14 +35,19 @@ class WindowsHotspot(QObject):
         )
         self._thread.start()
 
-    def stop(self):
-        """Ask the worker to stop and release its owned hotspot session."""
+    def stop(self, *, disconnect_existing=False):
+        """Stop this transfer's hotspot, optionally disconnecting a reused one."""
+        if disconnect_existing:
+            self._disconnect_existing_requested.set()
         self._stop_requested.set()
 
     def _run(self):
         """Run WinRT operations on one worker thread and report startup failures."""
         try:
-            asyncio.run(self._manage_session())
+            # Windows may briefly report an old session as ON while its async stop
+            # operation is completing. Serialize the full lifetime across dialogs.
+            with _HOTSPOT_SESSION_LOCK:
+                asyncio.run(self._manage_session())
         except Exception as error:
             self.failed.emit(self._friendly_error(error))
 
@@ -121,7 +131,7 @@ class WindowsHotspot(QObject):
             while not self._stop_requested.is_set():
                 await asyncio.sleep(0.2)
         finally:
-            if owns_session:
+            if owns_session or self._disconnect_existing_requested.is_set():
                 await manager.stop_tethering_async()
 
     @staticmethod
