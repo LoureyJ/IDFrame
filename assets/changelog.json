@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.1.39",
+    "changes": [
+      "Hotspot package-registration failures now include a local diagnostic log for easier troubleshooting."
+    ]
+  },
+  {
+    "version": "1.1.40",
+    "changes": [
+      "The installer now requests administrator approval to trust IDFrame's package certificate for hotspot access while keeping the app installed per user."
+    ]
+  },
+  {
     "version": "1.1.38",
     "changes": [
       "Automatic hotspot startup requires a one-time reinstall with the updated package installer on existing client PCs.",

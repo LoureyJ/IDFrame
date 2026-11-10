@@ -17,6 +17,7 @@
 - Never alter persistent hotspot credentials or stop a hotspot session IDFrame did not start.
 - Do not publish OTA. Prepare the client version and changelog after code changes.
 - Keep private signing keys outside Git and build artifacts except the signed identity package and its public certificate.
+- Request elevation only for installing the IDFrame public certificate in machine `TrustedPeople`; preserve the per-user application installation and OTA layout.
 - Do not rebuild the installer unless requested; the user approved updating the installer package for this feature.
 
 ## Review Focus

@@ -50,7 +50,7 @@ Name: "{group}\IDFrame"; Filename: "{app}\PortraitStudio.exe"; WorkingDir: "{app
 Filename: "{app}\PortraitStudio.exe"; Description: "Open IDFrame"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -File ""{app}\register_hotspot_package.ps1"" -InstallRoot ""{app}"" -Unregister"; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -ExecutionPolicy Bypass -File ""{app}\register_hotspot_package.ps1"" -InstallRoot ""{app}"" -Unregister"; Flags: runhidden waituntilterminated; RunOnceId: "UnregisterHotspotPackage"
 
 [UninstallDelete]
 Type: files; Name: "{app}\client.json"
@@ -62,6 +62,26 @@ Type: files; Name: "{app}\.client.lock"
 [Code]
 var
   HostPage: TInputQueryWizardPage;
+
+function RunMachineTrustAction(Action: String): Boolean;
+// Elevate only the certificate trust operation; keep app installation per-user.
+var
+  MarkerPath: String;
+  Parameters: String;
+  ErrorCode: Integer;
+begin
+  MarkerPath := ExpandConstant('{tmp}\IDFrameMachineTrust.ok');
+  DeleteFile(MarkerPath);
+  Parameters := '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' +
+    ExpandConstant('{app}\register_hotspot_package.ps1') +
+    '" -InstallRoot "' + ExpandConstant('{app}') +
+    '" ' + Action + ' -SuccessMarker "' + MarkerPath + '"';
+  Result := ShellExec('runas',
+    ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    Parameters, '', SW_HIDE, ewWaitUntilTerminated, ErrorCode) and
+    FileExists(MarkerPath);
+  DeleteFile(MarkerPath);
+end;
 
 procedure InitializeWizard;
 // Ask for the LAN host address before installing this client.
@@ -105,16 +125,36 @@ begin
       ExpandConstant('{app}\register_hotspot_package.ps1') +
       '" -InstallRoot "' + ExpandConstant('{app}') +
       '" -PackageVersion "{#AppVersion}.0"';
+
+    if not RunMachineTrustAction('-TrustMachine') then
+      RaiseException('IDFrame needs administrator approval to trust its hotspot package. ' +
+        'Retry setup and approve the Windows administrator prompt. If it still fails, see ' +
+        ExpandConstant('{app}\IDFrame-hotspot-registration.log') + '.');
+
     if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
       Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or
       (ResultCode <> 0) then
       RaiseException('IDFrame could not register Windows hotspot access. ' +
-        'Confirm that Windows 10 version 2004 or later allows the IDFrame package certificate.');
+        'See ' + ExpandConstant('{app}\IDFrame-hotspot-registration.log') +
+        ' for the Windows deployment details.');
 
     URL := Trim(HostPage.Values[0]);
     StringChangeEx(URL, '\', '\\', True);
     StringChangeEx(URL, '"', '\"', True);
     SaveStringToFile(ExpandConstant('{app}\client.json'),
       '{"host_url":"' + URL + '"}' + #13#10, False);
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+// Remove the machine-wide certificate when the user approves elevation.
+begin
+  if (CurUninstallStep = usUninstall) and
+     FileExists(ExpandConstant('{app}\Assets\IDFramePackage.cer')) then
+  begin
+    if not RunMachineTrustAction('-RemoveMachineTrust') then
+      MsgBox('IDFrame was removed, but Windows did not remove its machine-wide ' +
+        'package certificate. An administrator can remove the IDFrame Local Hotspot ' +
+        'certificate from Local Machine > Trusted People.', mbInformation, MB_OK);
   end;
 end;

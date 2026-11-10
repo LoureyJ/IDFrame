@@ -82,11 +82,15 @@ hotspot credentials. Internet is not needed for the transfer, but Windows must
 have a connected network profile and the PC's adapter must support tethering.
 
 The identity package is signed with a self-signed IDFrame certificate for this
-in-house deployment. The installer adds only its public certificate to the
-installing user's `TrustedPeople` store and registers the package for that user.
+in-house deployment. During installation, Windows asks for administrator
+approval to add only its public certificate to the machine's `TrustedPeople`
+store. The app itself remains installed for the current user, with the identity
+package registered to that user. Uninstall asks for administrator approval to
+remove the matching machine certificate; if that prompt is declined, IDFrame
+still uninstalls and the certificate can be removed later by an administrator.
 The private `hotspot-package-signing.pfx` remains under `.host/`; include it in
 the private host backup and never copy it to clients or GitHub. Uninstalling
-IDFrame removes its identity package and its matching public certificate.
+IDFrame removes its identity package and its matching per-user certificate.
 Subsequent application-code changes continue through the normal OTA process; an
 installer rebuild is needed only for a new PC that has never received the
 identity package or when the package identity changes.

@@ -22,7 +22,7 @@ Let an office client send a photo to IDFrame without joining the office LAN or u
 
 ## Implementation outline
 
-Add a small signed sparse package with package identity, an external-content declaration, and `wiFiControl`; register it from the installer at the install root. Keep signing material private on the host and include only the public certificate needed for client trust. Add a Windows hotspot controller around WinRT tethering, executed off the Qt UI thread. Update the receive dialog to manage the two QR stages and clean up its owned hotspot session on every exit path. Keep the existing local HTTP token upload and photo processing behavior.
+Add a small signed sparse package with package identity, an external-content declaration, and `wiFiControl`; register it from the installer at the install root. For the in-house self-signed package, request UAC elevation only to add its public certificate to the machine's `TrustedPeople` store, while keeping the app and sparse package registration per-user. Keep signing material private on the host and include only the public certificate needed for client trust. Add a Windows hotspot controller around WinRT tethering, executed off the Qt UI thread. Update the receive dialog to manage the two QR stages and clean up its owned hotspot session on every exit path. Keep the existing local HTTP token upload and photo processing behavior.
 
 ## Limitations
 
