@@ -7,7 +7,10 @@ import tempfile
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
+from pillow_heif import register_heif_opener
 from photo_sizes import PHOTO_SIZES, DPI
+
+register_heif_opener(thumbnails=False)
 
 ROOT = Path(__file__).resolve().parent
 LEGACY_MODEL_PATH = ROOT / "models" / "u2net_human_seg.onnx"
@@ -26,6 +29,7 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 MIN_BRIGHTNESS = 0.25
 MAX_BRIGHTNESS = 2.0
+MAX_SHARPEN = 200
 
 
 def load_photo(path, *, formats=None, max_pixels=None):
@@ -37,6 +41,39 @@ def load_photo(path, *, formats=None, max_pixels=None):
         # Composite transparent source files before inference.
         white = Image.new("RGBA", photo.size, "white")
         return Image.alpha_composite(white, photo).convert("RGB")
+
+
+def adjust_cutout(cutout, *, brightness=1.0, sharpen=0):
+    """Adjust subject brightness and edge clarity while preserving its alpha mask."""
+    if (
+        not math.isfinite(brightness)
+        or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS
+    ):
+        raise ValueError("Invalid portrait brightness")
+    if not math.isfinite(sharpen) or not 0 <= sharpen <= MAX_SHARPEN:
+        raise ValueError("Invalid portrait sharpening")
+
+    rgba = cutout.convert("RGBA")
+    if brightness != 1.0:
+        levels = [min(255, int(value * brightness)) for value in range(256)]
+        adjusted = rgba.convert("RGB").point(levels * 3)
+        adjusted.putalpha(rgba.getchannel("A"))
+        rgba = adjusted
+
+    if sharpen:
+        alpha = rgba.getchannel("A")
+        white = Image.new("RGBA", rgba.size, "white")
+        base = Image.alpha_composite(white, rgba).convert("RGB")
+        # Keep the blur radius proportional to output size so preview and print
+        # exports receive the same apparent strength.
+        radius = max(0.1, min(rgba.size) / 800)
+        filtered = base.filter(
+            ImageFilter.UnsharpMask(radius=radius, percent=round(sharpen), threshold=3)
+        )
+        result = Image.composite(filtered, base, alpha).convert("RGBA")
+        result.putalpha(alpha)
+        rgba = result
+    return rgba
 
 
 class PortraitRemover:
@@ -259,13 +296,15 @@ def frame_portrait(
     size=OUTPUT_SIZE,
     *,
     brightness=1.0,
+    sharpen=0,
     rotation=0.0,
 ):
     """Render a movable square crop from source pixels, without allocating a huge zoomed image.
 
     Offset is measured as a fraction of the output frame, positive right/down.
     The same geometry is used for the interactive preview and full-resolution save.
-    Brightness changes portrait RGB only; opacity and the white background are preserved.
+    Brightness and sharpening affect portrait pixels only; opacity and the white
+    background are preserved.
     Rotation is clockwise in degrees, applied once with crop scaling at export.
     """
     if not (
@@ -274,11 +313,6 @@ def frame_portrait(
         and all(math.isfinite(value) for value in offset)
     ):
         raise ValueError("Invalid crop framing")
-    if (
-        not math.isfinite(brightness)
-        or not MIN_BRIGHTNESS <= brightness <= MAX_BRIGHTNESS
-    ):
-        raise ValueError("Invalid portrait brightness")
     if not math.isfinite(rotation) or not -180 <= rotation <= 180:
         raise ValueError("Invalid portrait rotation")
     rgba = cutout.convert("RGBA")
@@ -305,14 +339,7 @@ def frame_portrait(
         resample=Image.Resampling.BICUBIC,
         fillcolor=(0, 0, 0, 0),
     )
-    if brightness != 1.0:
-        # Adjust before compositing so darkening never turns the white backdrop grey.
-        # A lookup table uses the existing bundled Pillow core, so older runtimes
-        # can receive this feature through OTA without new packaged dependencies.
-        levels = [min(255, int(value * brightness)) for value in range(256)]
-        adjusted = framed.convert("RGB").point(levels * 3)
-        adjusted.putalpha(framed.getchannel("A"))
-        framed = adjusted
+    framed = adjust_cutout(framed, brightness=brightness, sharpen=sharpen)
     canvas = Image.new("RGBA", size, "white")
     return Image.alpha_composite(canvas, framed).convert("RGB")
 

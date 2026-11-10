@@ -149,6 +149,8 @@ def build_runtime(force=False):
                 "PySide6.QtMultimediaWidgets",
                 "--collect-binaries",
                 "onnxruntime",
+                "--collect-all",
+                "pillow_heif",
                 ROOT / "deployment" / "runtime.py",
             ]
         )

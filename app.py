@@ -81,7 +81,7 @@ class PortraitApp(QMainWindow):
             "Fine hair": hair,
         }
         self.removal_mode, self.active_mode = "Auto", None
-        self.setWindowTitle(f"IDFrame v{VERSION} — Offline Background Remover")
+        self.setWindowTitle("IDFrame — Offline Background Remover")
         self.setWindowIcon(QIcon(str(ROOT / "assets/portrait-studio.ico")))
         available = QApplication.primaryScreen().availableGeometry()
         width, height = available.width() - 16, available.height() - 40
@@ -120,7 +120,7 @@ class PortraitApp(QMainWindow):
         icon.setPixmap(self.windowIcon().pixmap(34, 34))
         title = QLabel("IDFrame")
         title.setFont(QFont("Segoe UI", 23, QFont.Weight.Bold))
-        for widget in (icon, title, QLabel("v" + VERSION)):
+        for widget in (icon, title):
             header.addWidget(widget)
         header.addStretch()
         self.theme_buttons = {}
@@ -165,10 +165,6 @@ class PortraitApp(QMainWindow):
             button.setProperty("actionColor", color)
             toolbar.addWidget(button)
         toolbar.addStretch()
-        privacy = QLabel("Your photos stay on this computer")
-        privacy.setWordWrap(True)
-        privacy.setVisible(not compact)
-        toolbar.addWidget(privacy)
         page.addLayout(toolbar)
         workspace = QHBoxLayout()
         workspace.setSpacing(12)
@@ -253,21 +249,22 @@ class PortraitApp(QMainWindow):
         self.brightness_slider, self.brightness_label = self._slider(
             controls, "Lighting · Brightness", 25, 200
         )
+        self.sharpen_slider, self.sharpen_label = self._slider(
+            controls, "Lighting · Sharpen", 0, 200, initial=0
+        )
+        self.sharpen_label.setText("0%")
         self.zoom_slider.valueChanged.connect(
             lambda value: self.crop.set_framing(zoom=value / 100)
         )
         self.brightness_slider.valueChanged.connect(
             lambda value: self.crop.set_framing(brightness=value / 100)
         )
+        self.sharpen_slider.valueChanged.connect(
+            lambda value: self.crop.set_framing(sharpen=value)
+        )
         self.reset_button = QPushButton("Reset Adjustments")
         self.reset_button.clicked.connect(self.crop.reset)
         controls.addWidget(self.reset_button)
-        help_text = QLabel(
-            "Drag the preview to position.\nRotation: level the eyes with the guide."
-            "\nBrightness: 100% is neutral."
-        )
-        help_text.setWordWrap(True)
-        controls.addWidget(help_text)
         controls.addStretch()
         scroll.setWidget(body)
         layout.addWidget(scroll, 1)
@@ -289,6 +286,9 @@ class PortraitApp(QMainWindow):
         self.status_label.setWordWrap(True)
         status = QHBoxLayout()
         status.addWidget(self.status_label, 1)
+        self.version_label = QLabel("v" + VERSION)
+        self.version_label.setAccessibleName("Client version " + VERSION)
+        status.addWidget(self.version_label)
         self.show_in_folder_button = QPushButton("Show in Folder")
         self.show_in_folder_button.clicked.connect(self.show_saved_photo)
         self.show_in_folder_button.hide()
@@ -340,6 +340,10 @@ class PortraitApp(QMainWindow):
             slider.setValue(round(value * 100))
             slider.blockSignals(False)
             label.setText(f"{value:.0%}")
+        self.sharpen_slider.blockSignals(True)
+        self.sharpen_slider.setValue(round(self.crop.sharpen))
+        self.sharpen_slider.blockSignals(False)
+        self.sharpen_label.setText(f"{self.crop.sharpen:.0f}%")
         self.rotation_slider.blockSignals(True)
         self.rotation_slider.setValue(round(self.crop.rotation * 10))
         self.rotation_slider.blockSignals(False)
@@ -378,6 +382,7 @@ class PortraitApp(QMainWindow):
             self.zoom_slider,
             self.rotation_slider,
             self.brightness_slider,
+            self.sharpen_slider,
             self.reset_button,
             self.crop,
         ):
@@ -474,7 +479,7 @@ class PortraitApp(QMainWindow):
             self,
             "Open portrait",
             "",
-            "Photos (*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff);;All files (*)",
+            "Photos (*.jpg *.jpeg *.png *.webp *.bmp *.tif *.tiff *.heic *.heif);;All files (*)",
         )
         if path:
             self._work(
@@ -669,11 +674,12 @@ class PortraitApp(QMainWindow):
             )
             return
         self.person_name = name
-        cutout, zoom, offset, brightness, rotation = (
+        cutout, zoom, offset, brightness, sharpen, rotation = (
             self.crop.cutout,
             self.crop.zoom,
             self.crop.offset,
             self.crop.brightness,
+            self.crop.sharpen,
             self.crop.rotation,
         )
 
@@ -685,6 +691,7 @@ class PortraitApp(QMainWindow):
                 offset,
                 size=preset.pixels,
                 brightness=brightness,
+                sharpen=sharpen,
                 rotation=rotation,
             )
             while True:

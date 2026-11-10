@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.1.36",
+    "changes": [
+      "Added an optional Sharpen slider below Brightness. Preview and saved photos use the same setting, which starts at 0% and leaves the white background unchanged.",
+      "Added HEIC and HEIF photo support when opening files, pasting copied files, and receiving photos from a phone.",
+      "Removed the preview instructions and privacy tagline. Kept the client version visible in the footer."
+    ]
+  },
+  {
     "version": "1.1.34",
     "changes": [
       "Added Receive from Phone. Scan a single-use QR code, choose a photo, and send it directly to IDFrame over a trusted local network."

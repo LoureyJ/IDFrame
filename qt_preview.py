@@ -7,7 +7,13 @@ from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QImage, QPainter, QColor
 from PySide6.QtWidgets import QWidget
 
-from portrait import frame_portrait, MIN_BRIGHTNESS, MAX_BRIGHTNESS
+from portrait import (
+    frame_portrait,
+    adjust_cutout,
+    MIN_BRIGHTNESS,
+    MAX_BRIGHTNESS,
+    MAX_SHARPEN,
+)
 from photo_sizes import PHOTO_SIZES
 from portrait_guides import paint_guides
 
@@ -48,7 +54,7 @@ class PhotoPreview(QWidget):
         self.jobs = jobs
         self.framing = framing
         self.cutout = None
-        self.zoom, self.offset, self.brightness = 1.0, (0.0, 0.0), 1.0
+        self.zoom, self.offset, self.brightness, self.sharpen = 1.0, (0.0, 0.0), 1.0, 0
         self.rotation = 0.0
         self.output_size = PHOTO_SIZES["2x2"].pixels
         self.display = QImage()
@@ -72,7 +78,7 @@ class PhotoPreview(QWidget):
         self._thumbnail = None
         self.display = QImage()
         if reset:
-            self.zoom, self.offset, self.brightness = 1.0, (0.0, 0.0), 1.0
+            self.zoom, self.offset, self.brightness, self.sharpen = 1.0, (0.0, 0.0), 1.0, 0
             self.rotation = 0.0
         self._request()
         self.framing_changed.emit()
@@ -82,7 +88,13 @@ class PhotoPreview(QWidget):
         """Replace pending work instead of enqueuing every intermediate slider state."""
         self._generation += 1
         self._pending = (
-            (self._generation, self.cutout, self.brightness, self._thumbnail)
+            (
+                self._generation,
+                self.cutout,
+                self.brightness,
+                self.sharpen,
+                self._thumbnail,
+            )
             if self.cutout is not None
             else None
         )
@@ -92,7 +104,7 @@ class PhotoPreview(QWidget):
         """Prepare at most one image while retaining only the newest pending request."""
         if self._active or self._pending is None:
             return
-        generation, source, brightness, thumbnail = self._pending
+        generation, source, brightness, sharpen, thumbnail = self._pending
         self._pending = None
         self._active = True
         self.prepare_count += 1
@@ -106,11 +118,7 @@ class PhotoPreview(QWidget):
                     source, (1600, 1600), Image.Resampling.LANCZOS
                 ).convert("RGBA")
             )
-            adjusted = cached
-            if brightness != 1:
-                levels = [min(255, int(value * brightness)) for value in range(256)]
-                adjusted = cached.convert("RGB").point(levels * 3)
-                adjusted.putalpha(cached.getchannel("A"))
+            adjusted = adjust_cutout(cached, brightness=brightness, sharpen=sharpen)
             return cached, image_to_qt(adjusted)
 
         def ready(value, error):
@@ -123,7 +131,9 @@ class PhotoPreview(QWidget):
 
         self.jobs.submit(prepare, ready)
 
-    def set_framing(self, *, zoom=None, offset=None, brightness=None, rotation=None):
+    def set_framing(
+        self, *, zoom=None, offset=None, brightness=None, sharpen=None, rotation=None
+    ):
         """Clamp interactive adjustments and avoid rerendering pixels for pan or zoom."""
         if rotation is not None:
             if not math.isfinite(rotation):
@@ -154,13 +164,20 @@ class PhotoPreview(QWidget):
             if value != self.brightness:
                 self.brightness = value
                 self._request()
+        if sharpen is not None:
+            value = max(0, min(MAX_SHARPEN, float(sharpen)))
+            if value != self.sharpen:
+                self.sharpen = value
+                self._request()
         self.framing_changed.emit()
         self.update()
 
     def reset(self):
         """Reset crop, rotation and lighting while preserving applied alpha corrections."""
         self.guide_eye, self.guide_headroom = 0.38, 0.08
-        self.set_framing(zoom=1, offset=(0.0, 0.0), brightness=1, rotation=0)
+        self.set_framing(
+            zoom=1, offset=(0.0, 0.0), brightness=1, sharpen=0, rotation=0
+        )
 
     def set_guides_visible(self, visible):
         """Toggle positioning graphics without changing the document or export state."""
@@ -304,5 +321,6 @@ class PhotoPreview(QWidget):
             self.offset,
             size=self.output_size,
             brightness=self.brightness,
+            sharpen=self.sharpen,
             rotation=self.rotation,
         )

@@ -26,10 +26,10 @@ input,button{font:inherit;margin:0 0 1rem;max-width:100%}
 button{padding:.65rem 1rem}
 </style>
 <h1>Send photo to IDFrame</h1>
-<p>Choose one JPEG, PNG or WebP photo, up to 20 MB.</p>
+<p>Choose one JPEG, PNG, WebP or HEIC photo, up to 20 MB.</p>
 <form>
 <label for="photo">Photo</label><br>
-<input id="photo" type="file" accept="image/*" required><br>
+<input id="photo" type="file" accept="image/*,.heic,.heif" required><br>
 <button id="send" type="submit">Send photo</button>
 </form>
 <p id="status" role="status"></p>
@@ -235,9 +235,16 @@ class PhoneTransfer:
                     return
                 data.seek(0)
                 try:
-                    photo = load_photo(data, formats=("JPEG", "PNG", "WEBP"), max_pixels=MAX_PIXELS)
+                    photo = load_photo(
+                        data,
+                        formats=("JPEG", "PNG", "WEBP", "HEIF"),
+                        max_pixels=MAX_PIXELS,
+                    )
                 except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
-                    self.respond(415, b"Choose a readable JPEG, PNG or WebP photo up to 32 megapixels.")
+                    self.respond(
+                        415,
+                        b"Choose a readable JPEG, PNG, WebP or HEIC photo up to 32 megapixels.",
+                    )
                     return
                 with session._lock:
                     accepted = session._available()
