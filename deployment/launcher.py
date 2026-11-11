@@ -12,10 +12,32 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from deployment.updater import apply_update, recover
+from deployment.updater import apply_update, recover, validate_url
 from deployment.trust import PUBLIC_KEY
 from windows_branding import set_taskbar_identity
 from launcher_refresh import refresh_launcher
+
+
+HOST_FAILOVER_ADDRESSES = {
+    "192.168.83.169": "192.168.208.169",
+    "192.168.208.169": "192.168.83.169",
+}
+
+
+def update_host_candidates(configured_url):
+    """Return the configured OTA address followed by its paired LAN fallback."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    primary = validate_url(configured_url)
+    parsed = urlsplit(primary)
+    fallback_host = HOST_FAILOVER_ADDRESSES.get(parsed.hostname)
+    if not fallback_host:
+        return (primary,)
+    netloc = fallback_host
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    fallback = urlunsplit((parsed.scheme, netloc, "", "", ""))
+    return (primary, fallback)
 
 
 def set_window_icon(window, root_path):
@@ -34,15 +56,31 @@ def check_updates(
     recover(root_path)
     try:
         config = json.loads((root_path / "client.json").read_text(encoding="utf-8-sig"))
-        status = apply_update(
-            root_path,
-            config["host_url"],
-            PUBLIC_KEY,
-            progress=progress,
-            transfer_progress=transfer_progress,
-        )
-        logger.info(status)
-        return status
+        hosts = update_host_candidates(config["host_url"])
+        for index, host_url in enumerate(hosts):
+            if index:
+                progress("Primary update address unavailable; trying alternate…")
+            try:
+                status = apply_update(
+                    root_path,
+                    host_url,
+                    PUBLIC_KEY,
+                    progress=progress,
+                    transfer_progress=transfer_progress,
+                )
+            except OSError:
+                if index + 1 == len(hosts):
+                    raise
+                logger.warning(
+                    "Update host %s is unreachable; trying %s",
+                    host_url,
+                    hosts[index + 1],
+                    exc_info=True,
+                )
+                continue
+            logger.info("%s (host %s)", status, host_url)
+            return status
+        raise OSError("No configured update host could be reached")
     except Exception:
         logger.exception("Update skipped; retaining installed version")
         recover(root_path)
