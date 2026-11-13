@@ -3,7 +3,8 @@
 import math
 import ipaddress
 import threading
-import time
+import secrets
+
 
 import qrcode
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -104,7 +105,10 @@ class PhoneTransferDialog(QDialog):
 
     def _show_wifi_code(self, ssid, passphrase):
         """Display the temporary hotspot credentials as a standards-based Wi-Fi QR."""
-        qr_payload = f"WIFI:T:WPA;S:{ssid};P:{passphrase};;"
+        # Add a short random token to the QR payload so the image changes on every hotspot start.
+        # The token is placed in an unused field (H) which Wi‑Fi clients simply ignore.
+        token = secrets.token_urlsafe(8)
+        qr_payload = f"WIFI:T:WPA;S:{ssid};P:{passphrase};H:{token};;"
         image = qrcode.make(qr_payload, box_size=6, border=4).get_image().convert("RGBA")
         self.qr.setPixmap(QPixmap.fromImage(image_to_qt(image)))
         self.address.setText(f"Wi-Fi network: {ssid}\nPassword: {passphrase}")
