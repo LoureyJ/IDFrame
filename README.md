@@ -169,12 +169,13 @@ When saving, enter the person's name. The app suggests a filename such as
 are retained; repeat saves use `_002`, `_003`, and so on. A new photo clears the
 previous person's name. Cancelling either dialog leaves the current portrait open.
 
-The replacement camera logo is prepared in `assets/` for your next OTA publication.
-It is intentionally excluded from the already built version 1.1 installer, which
-retains the earlier portrait-frame icon.
-The pending update also refreshes this installation's desktop, Start menu, and
-existing taskbar shortcuts on first startup with the new logo. Windows taskbar
-grouping retains the existing internal Windows identity for update compatibility.
+`assets/portrait-studio.png` is the canonical logo. Release preparation generates
+the multi-resolution Windows icon from it; the app window uses the PNG, while
+the launcher, installer, desktop/Start menu shortcuts, and taskbar shortcut use
+the generated ICO. The app refreshes its installed shortcuts from that ICO on
+startup. Existing installer files are unchanged until `build_installer.bat` is
+run; OTA and GitHub source updates do not rebuild an installer.
+Windows taskbar grouping retains its existing internal identity for compatibility.
 
 The current OTA address is **http://192.168.83.169:8766**.
 With `auto_detect_ip` enabled in `host_settings.json`, starting the

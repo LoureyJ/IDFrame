@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.46",
+    "changes": [
+      "Use the PNG brand logo directly in the app and generate the installer, shortcut, and taskbar icon from the same artwork."
+    ]
+  },
+  {
     "version": "1.1.44",
     "changes": [
       "PNG exports are now losslessly optimized to reduce file size without changing photo quality."

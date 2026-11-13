@@ -83,7 +83,7 @@ class PortraitApp(QMainWindow):
         }
         self.removal_mode, self.active_mode = "Auto", None
         self.setWindowTitle("IDFrame — Offline Background Remover")
-        self.setWindowIcon(QIcon(str(ROOT / "assets/portrait-studio.ico")))
+        self.setWindowIcon(QIcon(str(ROOT / "assets/portrait-studio.png")))
         available = QApplication.primaryScreen().availableGeometry()
         width, height = available.width() - 16, available.height() - 40
         self.setMinimumSize(min(860, width), min(560, height))

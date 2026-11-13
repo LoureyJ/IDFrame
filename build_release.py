@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 from deployment.common import atomic_write, canonical, digest
+from deployment.branding import generate_windows_icon
 from deployment.publisher import publish, signing_key
 from deployment.updater import validate_url
 from deployment.versioning import prepare_version
@@ -239,6 +240,7 @@ def build_runtime(force=False):
         {
             "builder": digest(ROOT / "build_release.py"),
             "runtime": digest(ROOT / "deployment" / "runtime.py"),
+            "logo": digest(ROOT / "assets" / "portrait-studio.png"),
             "icon": digest(ROOT / "assets" / "portrait-studio.ico"),
             "manifest": digest(ROOT / "deployment" / "hotspot" / "runtime.manifest"),
             "packages": sorted(
@@ -336,6 +338,7 @@ def build_launcher():
     sources += [
         ROOT / "windows_branding.py",
         ROOT / "launcher_refresh.py",
+        ROOT / "assets/portrait-studio.png",
         ROOT / "assets/portrait-studio.ico",
     ]
     fingerprint = canonical(
@@ -441,6 +444,10 @@ def main():
             msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
         except OSError:
             parser.error("Another release build is running")
+        generate_windows_icon(
+            ROOT / "assets" / "portrait-studio.png",
+            ROOT / "assets" / "portrait-studio.ico",
+        )
         version = prepare_version(ROOT)
         if args.prepare_only:
             print(
