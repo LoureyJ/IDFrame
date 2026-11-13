@@ -18,6 +18,7 @@ class PortraitTests(unittest.TestCase):
             with Image.open(path) as saved:
                 self.assertEqual(saved.size, (1200, 1200))
                 self.assertEqual(saved.mode, "RGB")
+                self.assertEqual(saved.tobytes(), format_portrait(cutout).tobytes())
                 self.assertEqual(saved.getpixel((0, 0)), (255, 255, 255))
                 self.assertEqual(saved.getpixel((600, 600)), (230, 20, 40))
                 for dpi in saved.info["dpi"]:

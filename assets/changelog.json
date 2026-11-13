@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.44",
+    "changes": [
+      "PNG exports are now losslessly optimized to reduce file size without changing photo quality."
+    ]
+  },
+  {
     "version": "1.1.43",
     "changes": [
       "Client updates now try the paired 192.168.83.169 and 192.168.208.169 host addresses automatically when the configured address is unreachable."

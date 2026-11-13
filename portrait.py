@@ -352,7 +352,7 @@ def save_portrait(image, path, *, overwrite=True, size=OUTPUT_SIZE):
     handle, temporary = tempfile.mkstemp(suffix=".png", dir=path.parent)
     os.close(handle)
     try:
-        result.save(temporary, format="PNG", dpi=OUTPUT_DPI)
+        result.save(temporary, format="PNG", dpi=OUTPUT_DPI, optimize=True)
         if overwrite:
             os.replace(temporary, path)
         elif os.name == "nt":
