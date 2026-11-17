@@ -43,7 +43,11 @@ def source_fingerprint(root):
         for path in (root / "deployment" / "hotspot").rglob("*")
         if path.is_file()
     )
-    sources.extend(path for path in (root / "assets").rglob("*") if path.is_file())
+    sources.extend(
+        path
+        for path in (root / "assets").rglob("*")
+        if path.is_file() and path.name != "changelog.json"
+    )
     sources.extend(path for path in (root / "models").glob("*.onnx") if path.is_file())
     sources.extend(
         path

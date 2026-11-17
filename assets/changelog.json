@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.1.55",
+    "changes": [
+      "Fixed version synchronization so changelog edits do not trigger redundant version increments.",
+      "Fixed Receive from Phone QR code generation when using Windows hotspot."
+    ]
+  },
+  {
+    "version": "1.1.54",
+    "changes": [
+      "Fixed Receive from Phone QR code generation when using Windows hotspot.",
+      "Synchronized installed client version with changelog browser."
+    ]
+  },
+  {
     "version": "1.1.53",
     "changes": [
       "Fixed Receive from Phone QR code generation when using Windows hotspot.",
