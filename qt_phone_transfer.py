@@ -258,9 +258,12 @@ def detect_mobile_hotspot_ip():
         name = (interface.name() + " " + interface.humanReadableName()).lower()
         hotspot_interface = (
             "local area connection*" in name
+            or "local area connection" in name
             or "wi-fi direct" in name
             or "wifi direct" in name
             or "hotspot" in name
+            or "microsoft wi-fi direct" in name
+            or "mobile hotspot" in name
         )
         for entry in interface.addressEntries():
             try:

@@ -129,7 +129,16 @@ class PhoneTransfer:
         address = self.address or detect_lan_ip()
         if not address:
             raise OSError("IDFrame could not find a local network connection.")
-        with _Receiver((address, 0), self._handler(received)) as server:
+        server = None
+        for bind_addr in (address, ""):
+            try:
+                server = _Receiver((bind_addr, 0), self._handler(received))
+                break
+            except OSError:
+                continue
+        if server is None:
+            raise OSError("IDFrame could not start a local network listener.")
+        with server:
             self.deadline = time.monotonic() + self.lifetime
             if not self._closed.is_set():
                 ready(f"http://{address}:{server.server_port}{self.path}")
