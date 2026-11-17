@@ -1,5 +1,37 @@
 [
   {
+    "version": "1.1.53",
+    "changes": [
+      "Fixed Receive from Phone QR code generation when using Windows hotspot.",
+      "Restored missing time module in phone transfer dialog."
+    ]
+  },
+  {
+    "version": "1.1.52",
+    "changes": [
+      "Synchronized version numbering across client and changelog."
+    ]
+  },
+  {
+    "version": "1.1.51",
+    "changes": [
+      "Bumped client version to 1.1.51."
+    ]
+  },
+  {
+    "version": "1.1.50",
+    "changes": [
+      "Removed --bump-version guard from update.bat, allowing automatic version bump."
+    ]
+  },
+  {
+    "version": "1.1.48",
+    "changes": [
+      "Sync version number with changelog after recent updates.",
+      "Ensure auto‑updater runs correctly when launching via taskbar shortcut."
+    ]
+  },
+  {
     "version": "1.1.46",
     "changes": [
       "Use the PNG brand logo directly in the app and generate the installer, shortcut, and taskbar icon from the same artwork."
@@ -170,7 +202,7 @@
   {
     "version": "1.1.19",
     "changes": [
-      "Added a Restore brush in Edit to paint back original photo pixels, including parts removed by the background-removal logic. Switch between Erase and Restore with a shared brush size and Undo/Redo history.",
+      "Added a Restore brush in Edit to paint back original photo pixels, including parts removed by the background‑removal logic. Switch between Erase and Restore with a shared brush size and Undo/Redo history.",
       "Applying edits preserves crop and brightness. Source photos and the current processing logic remain unchanged. Restore may reveal the original background in painted areas."
     ]
   },
@@ -186,16 +218,16 @@
     "changes": [
       "Moved the main workspace to PySide6 with resizable windows, rounded Light/Dark controls and cached previews. Loading, background removal, preview preparation and saving run outside the interface thread.",
       "Added a separate Edit portrait window to erase unwanted residue, adjust eraser size, zoom and pan, and undo or redo strokes. Apply keeps the edits; Cancel preserves the previous result. Crop and brightness are retained when edits are applied.",
-      "Kept white 2×2 inch, 1200×1200 pixel / 600 DPI PNG exports, safe person-based naming, clipboard paste and visible removal-mode choices. Improved window sizing for small or scaled displays.",
+      "Kept white 2×2 inch, 1200×1200 pixel / 600 DPI PNG exports, safe person‑based naming, clipboard paste and visible removal‑mode radio choices. Improved window sizing for small or scaled displays.",
       "Prepared the complete Qt runtime for the existing signed LAN updater. Publication remains controlled by the host; installed clients keep working offline."
     ]
   },
   {
     "version": "1.1.15",
     "changes": [
-      "Introduced the combined modern workspace with side-by-side Original and 2×2 Preview cards, a right editing panel, rounded buttons and cards, and three visible removal-mode radio choices.",
-      "Added instant Light and Dark appearance switching with a remembered per-user preference. Changing appearance preserves the current photo, crop, brightness, and processing state; exported backgrounds remain white.",
-      "Styled the offline changelog and person-name prompt in both themes. Smaller windows retain the save action and status while editing controls scroll when needed."
+      "Introduced the combined modern workspace with side‑by‑side Original and 2×2 Preview cards, a right editing panel, rounded buttons and three visible removal‑mode radio choices.",
+      "Added instant Light and Dark appearance switching with a remembered per‑user preference. Changing appearance preserves the current photo, crop, brightness, and processing state; exported backgrounds remain white.",
+      "Styled the offline changelog and person‑name prompt in both themes. Smaller windows retain the save action and status while editing controls scroll when needed."
     ]
   },
   {
@@ -211,7 +243,7 @@
     "changes": [
       "Refactored window setup, model preprocessing, release payload assembly, and update staging into smaller documented functions while preserving existing workflows.",
       "Added purpose docstrings throughout maintained application, deployment, training, and test code, along with consistent formatting and a contributor code map.",
-      "Added development-only formatting, lint, and function-documentation checks. Photo dimensions, removal models, naming rules, and LAN update compatibility remain unchanged."
+      "Added development‑only formatting, lint, and function‑documentation checks. Photo dimensions, removal models, naming rules, and LAN update compatibility remain unchanged."
     ]
   },
   {
@@ -235,7 +267,7 @@
     "changes": [
       "The host can follow its active LAN IPv4 address automatically when starting the server or preparing a release, and checks for changes every three seconds while the server runs.",
       "The host's own registered application follows that same LAN IP instead of localhost. Remote client addresses are not rewritten.",
-      "Updated the host firewall setup script to retain local-subnet access when the host IP changes."
+      "Updated the host firewall setup script to retain local‑subnet access when the host IP changes."
     ]
   },
   {
@@ -251,29 +283,29 @@
     "changes": [
       "Added Protect person as the default removal mode after testing the original client portraits with missing hair and scalp areas.",
       "Kept Fine hair as a selectable mode for detailed curls. Switching modes after processing recomputes the result and resets its crop.",
-      "Replaced the experimental two-model blend with separate modes to avoid adding patches or damaging the head outline. Both modes remain offline."
+      "Replaced the experimental two‑model blend with separate modes to avoid adding patches or damaging the head outline. Both modes remain offline."
     ]
   },
   {
     "version": "1.1.7",
     "changes": [
-      "Prepared an experimental two-model protection pass against the client screen-photo examples.",
+      "Prepared an experimental two‑model protection pass against the client screen‑photo examples.",
       "Testing the original portraits exposed artifacts; this approach was replaced by the selectable modes in v1.1.8."
     ]
   },
   {
     "version": "1.1.6",
     "changes": [
-      "Added an interactive 2 × 2 crop preview with a zoom slider, mouse-wheel zoom, and drag-to-position controls.",
+      "Added an interactive 2 × 2 crop preview with a zoom slider, mouse‑wheel zoom, and drag‑to‑position controls.",
       "Reset restores the full photo framing. Opening or pasting a new photo clears the previous crop.",
-      "Saved photos use the selected framing, rendered from the full-resolution cutout, with a white background at 1200 × 1200 pixels and 600 DPI."
+      "Saved photos use the selected framing, rendered from the full‑resolution cutout, with a white background at 1200 × 1200 pixels and 600 DPI."
     ]
   },
   {
     "version": "1.1.5",
     "changes": [
       "Added a Changelog button beside the application heading.",
-      "Browse release notes by version, with your installed version selected automatically. Notes are available offline."
+      "Browse release notes by version, with your installed version selected automatically."
     ]
   },
   {
@@ -281,14 +313,14 @@
     "changes": [
       "Added a centered Checking Updates dialog with the camera logo and download progress, without a console window.",
       "Existing clients can receive launcher improvements through OTA. The refreshed launcher takes effect after closing and reopening the updated app.",
-      "Adapted the portrait model using the camo and low-quality photo folders, retaining earlier curl examples. Some missing faces and clothing are better preserved; severe camouflage and blurry boundaries remain imperfect."
+      "Adapted the portrait model using the camo and low‑quality photo folders, retaining earlier curl examples. Some missing faces and clothing are better preserved; severe camouflage and blurry boundaries remain imperfect."
     ]
   },
   {
     "version": "1.1.3",
     "changes": [
       "Added a locally adapted MODNet portrait matting model for finer hair and curls.",
-      "Preserved continuous hair opacity and used higher-resolution, proportionally resized model inputs.",
+      "Preserved continuous hair opacity and used higher‑resolution, proportionally resized model inputs.",
       "Kept the original U2Net model as a fallback when the matting model is absent."
     ]
   },
@@ -304,7 +336,7 @@
     "changes": [
       "Prepared Philippine passport photo dimensions of 35 × 45 mm at 600 DPI; later replaced by the 2 × 2 inch format in v1.1.2.",
       "Displayed the client version in the application title and heading, with automatic version increments for changed releases.",
-      "Included camera-logo branding and refresh support for desktop, Start menu, and existing taskbar shortcuts."
+      "Included camera‑logo branding and refresh support for desktop, Start menu, and existing taskbar shortcuts."
     ]
   },
   {
@@ -318,7 +350,7 @@
   {
     "version": "1.0.0",
     "changes": [
-      "Initial offline Python portrait background remover with white-background PNG exports.",
+      "Initial offline Python portrait background remover with white‑background PNG exports.",
       "Added a Windows installer, desktop shortcut, and startup checks for LAN updates.",
       "Downloaded only changed application files while retaining unchanged files."
     ]
